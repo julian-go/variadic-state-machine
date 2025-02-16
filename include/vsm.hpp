@@ -8,235 +8,266 @@
 
 namespace vsm {
 
+namespace detail {
+template <typename Type, typename = void>
+struct HasName : std::false_type {};
+
+template <typename Type>
+struct HasName<Type, std::void_t<decltype(Type::Name())>> : std::true_type {};
+}  // namespace detail
+
 template <typename ToState>
 struct TransitionTo;
-struct DoNothing;
-template <typename... Actions>
-struct Either;
-template <typename... Actions>
-struct Maybe;
 
-struct LogInfo {
-  std::string_view from_state;
-  std::string_view to_state;
-  std::string_view event;
-};
-
-///@brief The main state machine class
-///
-/// The state machine uses variadic templates and std::variant to allow for
-/// compile-time checking of the states and events.
-///
-///@tparam InitialState
-///@tparam States
-template <typename InitialState, typename... States>
+/// @brief
+/// @tparam InitialState
+/// @tparam ...States
+template <typename Data, typename InitialState, typename... States>
 class StateMachine {
  public:
-  explicit StateMachine(InitialState initial_state, States... states)
-      : states_{std::move(initial_state), std::move(states)...} {
-    std::visit([this](auto* state) { InitialTransition(*state); },
-               current_state_);
-  }
+  using LogCallback = std::function<void(std::string_view, std::string_view)>;
 
-  void Process() {
-    std::visit([this](auto* state) { DoProcess(state); }, current_state_);
-  }
+  /// @brief Constructs a new state machine.
+  /// @param initial_state  The initial state the state machine begins in.
+  /// @param ...states      The remaining states the state machine can
+  /// transition to.
+  explicit StateMachine(Data &data, InitialState initial_state,
+                        States... states);
 
-  template <typename SmData>
-  void Process(SmData& data) {
-    std::visit([this, &data](auto* state) { DoProcess(state, data); },
-               current_state_);
-  }
+  /// @brief Processes the current state, calling its Process(...) function.
+  /// Note: Might result in a transition.
+  void Process(Data &data);
 
+  /// @brief Forwards the event to the currently active state.
+  /// Note: Might result in a transition.
   template <typename Event>
-  void Handle(const Event& event) {
-    auto state_visitor = [this, &event](auto* state) -> void {
-      state->Handle(event).Execute(*this, *state, event);
-    };
-    std::visit(state_visitor, current_state_);
-  }
+  void Handle(Data &data, const Event &event);
 
-  ///@brief Alternative Handle function that allows for shared data to be
-  /// passed
-  /// to the states for handling
-  ///
-  ///@tparam Event The type of event to handle
-  ///@tparam SmData The type of shared data to pass to the states
-  ///@param event The event to handle
-  ///@param data The shared data to pass to the states
-  template <typename Event, typename SmData>
-  void Handle(const Event& event, SmData& data) {
-    auto state_vistor = [this, &event, &data](auto* state) -> void {
-      state->Handle(event, data).Execute(*this, *state, event, data);
-    };
-    std::visit(state_vistor, current_state_);
-  }
-
-  void SetLogCallback(std::function<void(LogInfo)> log_cb) {
-    log_cb_ = std::move(log_cb);
-  }
+  /// @brief Sets an optional log callback that is called for every transition
+  /// @param log_cb The callback to use, syntax should take (from, to)
+  void SetLogCallback(LogCallback log_cb);
 
  private:
   template <typename ToState>
   friend struct TransitionTo;
 
+  /// @brief Causes the statemachine to transition to a new state
+  /// @tparam State     The state to transition to
+  /// @return A reference to the internal state
   template <typename State>
-  auto DoTransitionTo() -> State& {
-    auto& state = std::get<State>(states_);
-    current_state_ = &state;
-    return state;
-  }
+  auto TransitionTo() -> State &;
 
-  template <typename Type, typename = void>
-  struct HasName : std::false_type {};
-
-  template <typename Type>
-  struct HasName<Type, std::void_t<decltype(Type::Name())>> : std::true_type {};
-
-  template <
-      typename FromState, typename ToState, typename Event,
-      std::enable_if_t<!HasName<FromState>::value || !HasName<ToState>::value ||
-                           !HasName<Event>::value,
-                       bool> = true>
-  void LogTransition() {
-    if (log_cb_) {
-      log_cb_({"unknown", "unknown", "unknown"});
-    }
-  }
-  template <
-      typename FromState, typename ToState, typename Event,
-      std::enable_if_t<HasName<FromState>::value && HasName<ToState>::value &&
-                           HasName<Event>::value,
-                       bool> = true>
-  void LogTransition() {
-    if (log_cb_) {
-      log_cb_({FromState::Name(), ToState::Name(), Event::Name()});
-    }
-  }
-
-  void InitialTransition(...) {}
+  /// @brief The initial transition is called upon construction of the state
+  /// machine
+  void InitialTransition(...) {};
   template <typename State>
-  auto InitialTransition(State& state) -> decltype(state.OnEnter()) {
-    state.OnEnter();
-  }
+  auto InitialTransition(State &state,
+                         Data &data) -> decltype(state.OnEnter(data));
 
-  void DoProcess(...) {};
-  template <typename State>
-  auto DoProcess(State* state) -> decltype(state->Process()) {
-    state->Process();
-  }
-  template <typename State, typename SmData>
-  auto DoProcess(State* state, SmData& data) -> decltype(state->Process(data)) {
-    state->Process(data);
-  }
-
+  /// @brief The list of states the statemachine holds, no duplicates possible
   std::tuple<InitialState, States...> states_;
-  std::variant<InitialState*, States*...> current_state_{&std::get<0>(states_)};
-  std::function<void(LogInfo)> log_cb_;
+
+  /// @brief Holds a pointer to the currently active state
+  std::variant<InitialState *, States *...> current_state_{
+      &std::get<0>(states_)};
+
+  /// @brief The logging callback
+  LogCallback log_cb_;
 };
 
-///@brief Standard action to transition to a state
-///
-///@tparam State The state to transition to
+/// @brief Defines a transition to a state, moves the statemachine to the state
+/// if executed.
+/// @tparam ToState     The state the transition targets
 template <typename ToState>
 struct TransitionTo {
-  template <typename StateMachine, typename FromState, typename Event>
-  void Execute(StateMachine& machine, FromState& from_state,
-               const Event& event) {
-    machine.template LogTransition<FromState, ToState, Event>();
-    Exit(from_state, event);
-    auto& to_state = machine.template DoTransitionTo<ToState>();
-    Enter(to_state, event);
-  }
-
-  template <typename StateMachine, typename FromState, typename Event,
-            typename SmData>
-  void Execute(StateMachine& machine, FromState& from_state, const Event& event,
-               SmData& data) {
-    machine.template LogTransition<FromState, ToState, Event>();
-    Exit(from_state, event, data);
-    auto& to_state = machine.template DoTransitionTo<ToState>();
-    Enter(to_state, event, data);
-  }
+  /// @brief Executes this transition
+  template <typename StateMachine, typename FromState, typename Data,
+            typename... Event>
+  void Execute(StateMachine &machine, FromState &from, Data &data,
+               const Event &...event);
 
  private:
-  template <typename State, typename Event>
-  auto Exit(State& from_state,
-            const Event& event) -> decltype(from_state.OnExit(event)) {
-    from_state.OnExit(event);
-  }
-
-  template <typename State, typename Event, typename SmData>
-  auto Exit(State& from_state, const Event& event,
-            SmData& data) -> decltype(from_state.OnExit(event, data)) {
-    from_state.OnExit(event, data);
-  }
-
   void Exit(...) {};
-
-  template <typename State, typename Event>
-  auto Enter(State& to_state,
-             const Event& event) -> decltype(to_state.OnEnter(event)) {
-    to_state.OnEnter(event);
-  }
-
-  template <typename State, typename Event, typename SmData>
-  auto Enter(State& to_state, const Event& event,
-             SmData& data) -> decltype(to_state.OnEnter(event, data)) {
-    to_state.OnEnter(event, data);
-  }
+  template <typename State, typename Data, typename... Event>
+  auto Exit(State &from, Data &data,
+            const Event &...event) -> decltype(from.OnExit(data));
+  template <typename State, typename Data, typename Event, typename... REvent>
+  auto Exit(State &from, Data &data, const Event &event,
+            const REvent &...) -> decltype(from.OnExit(data, event));
 
   void Enter(...) {};
+  template <typename State, typename Data, typename... Event>
+  auto Enter(State &to, Data &data,
+             const Event &...event) -> decltype(to.OnEnter(data));
+  template <typename State, typename Data, typename Event, typename... REvent>
+  auto Enter(State &to, Data &data, const Event &event,
+             const REvent &...) -> decltype(to.OnEnter(data, event));
+
+  template <typename StateMachine, typename FromState,
+            std::enable_if_t<!detail::HasName<FromState>::value ||
+                                 !detail::HasName<ToState>::value,
+                             bool> = true>
+  void Log(StateMachine &) {};
+  template <typename StateMachine, typename FromState,
+            std::enable_if_t<detail::HasName<FromState>::value &&
+                                 detail::HasName<ToState>::value,
+                             bool> = true>
+  void Log(StateMachine &machine);
 };
 
-///@brief Standard action that does nothing
+/// @brief Convenience transition that does nothing.
 struct DoNothing {
   void Execute(...) const {}
 };
 
-///@brief Wrapper to allow for different transitions to be performed by a
-/// Handle() call
-///
-///@tparam Actions List of actions that can be performed
-template <typename... Actions>
+/// @brief Convenience transition that can contain different transitions for
+/// branching
+/// @tparam ...Transitions  The transitions that can be contained
+template <typename... Transitions>
 struct Either {
-  template <typename Action>
-  // NOLINTNEXTLINE(google-explicit-constructor)
-  Either(Action action) : action_{std::move(action)} {}
+  template <typename Transition>
+  Either(Transition transition) : transition_{std::move(transition)} {}
 
-  template <typename StateMachine, typename FromState, typename Event>
-  void Execute(StateMachine& machine, FromState& from_state,
-               const Event& event) {
-    auto action_visitor = [&machine, &from_state,
-                           &event](auto& action) -> void {
-      action.Execute(machine, from_state, event);
-    };
-    std::visit(action_visitor, action_);
-  }
-
-  template <typename StateMachine, typename FromState, typename Event,
-            typename SmData>
-  void Execute(StateMachine& machine, FromState& from_state, const Event& event,
-               SmData& data) {
-    auto action_visitor = [&machine, &from_state, &event,
-                           &data](auto& action) -> void {
-      action.Execute(machine, from_state, event, data);
-    };
-    std::visit(action_visitor, action_);
-  }
+  template <typename StateMachine, typename FromState, typename Data,
+            typename... Event>
+  void Execute(StateMachine &machine, FromState &from, Data &data,
+               const Event &...event);
 
  private:
-  std::variant<Actions...> action_;
+  std::variant<Transitions...> transition_;
 };
 
-///@brief Convenience wrapper for OneOf that allows for some actions to be
-/// performed (or nothing)
-///
-///@tparam Actions Actions that might be performed
-template <typename... Actions>
-struct Maybe : public Either<Actions..., DoNothing> {
-  using Either<Actions..., DoNothing>::Either;
+/// @brief Convenience transition that can contain differnt transitions or
+/// nothing.
+/// @tparam ...Transitions  The transitions that can be contained
+template <typename... Transitions>
+struct Maybe : public Either<Transitions..., DoNothing> {
+  using Either<Transitions..., DoNothing>::Either;
 };
+
+// =======================================================================
+// Implementation of StateMachine Class
+// =======================================================================
+
+template <typename Data, typename InitialState, typename... States>
+StateMachine<Data, InitialState, States...>::StateMachine(
+    Data &data, InitialState initial_state, States... states) {
+  auto state_visitor = [this, &data](auto *state) {
+    InitialTransition(*state, data);
+  };
+  std::visit(state_visitor, current_state_);
+}
+
+template <typename Data, typename InitialState, typename... States>
+void StateMachine<Data, InitialState, States...>::Process(Data &data) {
+  auto state_visitor = [this, &data](auto *state) {
+    state->Process(data).Execute(*this, *state, data);
+  };
+  std::visit(state_visitor, current_state_);
+}
+
+template <typename Data, typename InitialState, typename... States>
+template <typename Event>
+void StateMachine<Data, InitialState, States...>::Handle(Data &data,
+                                                         const Event &event) {
+  auto state_vistor = [this, &data, &event](auto *state) -> void {
+    state->Handle(data, event).Execute(*this, *state, data, event);
+  };
+  std::visit(state_vistor, current_state_);
+}
+
+template <typename Data, typename InitialState, typename... States>
+void StateMachine<Data, InitialState, States...>::SetLogCallback(
+    LogCallback log_cb) {
+  log_cb_ = std::move(log_cb);
+}
+
+template <typename Data, typename InitialState, typename... States>
+template <typename State>
+auto StateMachine<Data, InitialState, States...>::TransitionTo() -> State & {
+  auto &state = std::get<State>(states_);
+  current_state_ = &state;
+  return state;
+}
+
+template <typename Data, typename InitialState, typename... States>
+template <typename State>
+auto StateMachine<Data, InitialState, States...>::InitialTransition(
+    State &state, Data &data) -> decltype(state.OnEnter(data)) {
+  state.OnEnter(data);
+}
+
+// =======================================================================
+// Implementation of TransitionTo Class
+// =======================================================================
+
+template <typename ToState>
+template <typename StateMachine, typename FromState, typename Data,
+          typename... Event>
+void TransitionTo<ToState>::Execute(StateMachine &machine, FromState &from,
+                                    Data &data, const Event &...event) {
+  Log<StateMachine, FromState>(machine);
+  Exit(from, data, event...);
+  auto &to = machine.template TransitionTo<ToState>();
+  Enter(to, data, event...);
+}
+
+template <typename ToState>
+template <typename State, typename Data, typename... Event>
+auto TransitionTo<ToState>::Exit(State &from, Data &data, const Event &...event)
+    -> decltype(from.OnExit(data)) {
+  from.OnExit(data);
+}
+
+template <typename ToState>
+template <typename State, typename Data, typename Event, typename... REvent>
+auto TransitionTo<ToState>::Exit(State &from, Data &data, const Event &event,
+                                 const REvent &...)
+    -> decltype(from.OnExit(data, event)) {
+  from.OnExit(data, event);
+}
+
+template <typename ToState>
+template <typename State, typename Data, typename... Event>
+auto TransitionTo<ToState>::Enter(State &to, Data &data, const Event &...event)
+    -> decltype(to.OnEnter(data)) {
+  to.OnEnter(data);
+}
+
+template <typename ToState>
+template <typename State, typename Data, typename Event, typename... REvent>
+auto TransitionTo<ToState>::Enter(State &to, Data &data, const Event &event,
+                                  const REvent &...)
+    -> decltype(to.OnEnter(data, event)) {
+  to.OnEnter(data, event);
+}
+
+template <typename ToState>
+template <typename StateMachine, typename FromState,
+          std::enable_if_t<detail::HasName<FromState>::value &&
+                               detail::HasName<ToState>::value,
+                           bool>>
+void TransitionTo<ToState>::Log(StateMachine &machine) {
+  if (machine.log_cb_) {
+    machine.log_cb_(FromState::Name(), ToState::Name());
+  }
+}
+
+// =======================================================================
+// Implementation of Either Class
+// =======================================================================
+
+template <typename... Transitions>
+template <typename StateMachine, typename FromState, typename Data,
+          typename... Event>
+void Either<Transitions...>::Execute(StateMachine &machine, FromState &from,
+                                     Data &data, const Event &...event) {
+  auto transition_visitor = [&machine, &from, &data,
+                             &event...](auto &transition) -> void {
+    transition.Execute(machine, from, data, event...);
+  };
+  std::visit(transition_visitor, transition_);
+}
 
 }  // namespace vsm
 
