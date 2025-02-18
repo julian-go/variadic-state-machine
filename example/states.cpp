@@ -17,8 +17,8 @@ void CallForHelp() { std::cout << "Calling for help..." << std::endl; }
 struct Idle;
 struct Moving;
 
-auto Idle::Handle(const Call& event,
-                  SmData& data) -> vsm::Maybe<vsm::TransitionTo<Moving>> {
+auto Idle::Handle(SmData& data,
+                  const Call& event) -> vsm::Maybe<vsm::TransitionTo<Moving>> {
   data.dest_floor = event.floor;
 
   if (data.dest_floor == data.floor) {
@@ -34,18 +34,18 @@ auto Idle::Handle(const Call& event,
   return vsm::TransitionTo<Moving>{};
 }
 
-auto Idle::Handle(const FloorSensor& event,
-                  SmData& /*data*/) -> vsm::DoNothing {
+auto Idle::Handle(SmData& /*data*/,
+                  const FloorSensor& event) -> vsm::DoNothing {
   std::cout << "Idle: Handle FloorSensor " << event.floor << std::endl;
   return {};
 }
 
-auto Moving::Handle(const Call& event, SmData& /*data*/) -> vsm::DoNothing {
+auto Moving::Handle(SmData& /*data*/, const Call& event) -> vsm::DoNothing {
   std::cout << "Moving: Handle FloorCall " << event.floor << std::endl;
   return {};
 }
 
-auto Moving::Handle(const FloorSensor& event, SmData& data)
+auto Moving::Handle(SmData& data, const FloorSensor& event)
     -> vsm::Maybe<vsm::TransitionTo<Idle>, vsm::TransitionTo<Panic>> {
   int expected_floor = data.floor + data.direction;
   if (event.floor != expected_floor) {
@@ -58,8 +58,8 @@ auto Moving::Handle(const FloorSensor& event, SmData& data)
   return vsm::DoNothing{};
 }
 
-void Panic::OnEnter(const FloorSensor& /*event*/, SmData& /*data*/) {
+void Panic::OnEnter(SmData& /*data*/, const FloorSensor& /*event*/) {
   CallForMaintenance();
 }
 
-void Panic::OnEnter(const Alarm& /*event*/, SmData& /*data*/) { CallForHelp(); }
+void Panic::OnEnter(SmData& /*data*/, const Alarm& /*event*/) { CallForHelp(); }

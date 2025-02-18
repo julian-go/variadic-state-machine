@@ -14,43 +14,45 @@ struct Panic;
 struct Idle {
   static constexpr auto Name() -> std::string_view { return "Idle"; }
 
-  auto Handle(const Call& event,
-              SmData& data) -> vsm::Maybe<vsm::TransitionTo<Moving>>;
-  auto Handle(const FloorSensor& event, SmData& data) -> vsm::DoNothing;
-  auto Handle(const Alarm& /*event*/,
-              SmData& /*data*/) -> vsm::TransitionTo<Panic> {
+  auto Process(SmData&) -> vsm::DoNothing { return vsm::DoNothing{}; };
+  auto Handle(SmData& data,
+              const Call& event) -> vsm::Maybe<vsm::TransitionTo<Moving>>;
+  auto Handle(SmData& data, const FloorSensor& event) -> vsm::DoNothing;
+  auto Handle(SmData& /*data*/,
+              const Alarm& /*event*/) -> vsm::TransitionTo<Panic> {
     return {};
   };
 };
 
 struct Moving {
   static constexpr auto Name() -> std::string_view { return "Moving"; }
-
-  auto Handle(const Call& event, SmData& data) -> vsm::DoNothing;
-  auto Handle(const FloorSensor& event, SmData& data)
+  auto Process(SmData&) -> vsm::DoNothing { return vsm::DoNothing{}; };
+  auto Handle(SmData& data, const Call& event) -> vsm::DoNothing;
+  auto Handle(SmData& data, const FloorSensor& event)
       -> vsm::Maybe<vsm::TransitionTo<Idle>, vsm::TransitionTo<Panic>>;
-  auto Handle(const Alarm& /*event*/,
-              SmData& /*data*/) -> vsm::TransitionTo<Panic> {
-    return {};
-  };
+  auto Handle(SmData&, const Alarm&) -> vsm::TransitionTo<Panic> { return {}; };
 };
 
 struct Panic {
   static constexpr auto Name() -> std::string_view { return "Panic"; }
 
   template <typename Event>
-  auto Handle(const Event& /*event*/, SmData& /*data*/) -> vsm::DoNothing {
+  auto Handle(SmData& /*data*/, const Event& /*event*/) -> vsm::DoNothing {
     // Panic does not handle any events
     return {};
   };
 
-  void OnEnter(const FloorSensor& event, SmData& data);
-  void OnEnter(const Alarm& event, SmData& data);
+  void OnEnter(SmData& data, const FloorSensor& event);
+  void OnEnter(SmData& data, const Alarm& event);
 
-  void Process() {
+  auto Process(SmData& data) -> vsm::Maybe<vsm::TransitionTo<Idle>> {
     std::cout << "Been panicking for " << panic_seconds << " seconds"
               << std::endl;
     panic_seconds++;
+    if (panic_seconds > 10) {
+      return vsm::TransitionTo<Idle>{};
+    }
+    return vsm::DoNothing{};
   }
 
   int panic_seconds = 0;
