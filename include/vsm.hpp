@@ -1,5 +1,5 @@
-#ifndef VARIANTSTATEMACHINE_VSM_H_
-#define VARIANTSTATEMACHINE_VSM_H_
+#ifndef VARIADICSTATEMACHINE_VSM_H_
+#define VARIADICSTATEMACHINE_VSM_H_
 
 #include <functional>
 #include <string_view>
@@ -19,15 +19,14 @@ struct HasName<Type, std::void_t<decltype(Type::Name())>> : std::true_type {};
 template <typename ToState>
 struct TransitionTo;
 
-/// @brief
-/// @tparam InitialState
-/// @tparam ...States
+/// @brief An input-driven state machine for embedded applications.
 template <typename Data, typename InitialState, typename... States>
 class StateMachine {
  public:
   using LogCallback = std::function<void(std::string_view, std::string_view)>;
 
   /// @brief Constructs a new state machine.
+  /// @param data           Data shared by every state of the state machine
   /// @param initial_state  The initial state the state machine begins in.
   /// @param ...states      The remaining states the state machine can
   /// transition to.
