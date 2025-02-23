@@ -60,8 +60,8 @@ class StateMachine {
   /// machine
   void InitialTransition(...) {};
   template <typename State>
-  auto InitialTransition(State &state,
-                         Data &data) -> decltype(state.OnEnter(data));
+  auto InitialTransition(State &state, Data &data)
+      -> decltype(state.OnEnter(data));
 
   /// @brief The list of states the statemachine holds, no duplicates possible
   std::tuple<InitialState, States...> states_;
@@ -87,26 +87,24 @@ struct TransitionTo {
 
  private:
   void Exit(...) {};
-  template <typename State, typename Data, typename... Event>
-  auto Exit(State &from, Data &data,
-            const Event &...event) -> decltype(from.OnExit(data));
-  template <typename State, typename Data, typename Event, typename... REvent>
-  auto Exit(State &from, Data &data, const Event &event,
-            const REvent &...) -> decltype(from.OnExit(data, event));
+  template <typename State, typename Data>
+  auto Exit(State &from, Data &data) -> decltype(from.OnExit(data));
+  template <typename State, typename Data, typename Event>
+  auto Exit(State &from, Data &data, const Event &event)
+      -> decltype(from.OnExit(data, event));
 
   void Enter(...) {};
-  template <typename State, typename Data, typename... Event>
-  auto Enter(State &to, Data &data,
-             const Event &...event) -> decltype(to.OnEnter(data));
-  template <typename State, typename Data, typename Event, typename... REvent>
-  auto Enter(State &to, Data &data, const Event &event,
-             const REvent &...) -> decltype(to.OnEnter(data, event));
+  template <typename State, typename Data>
+  auto Enter(State &to, Data &data) -> decltype(to.OnEnter(data));
+  template <typename State, typename Data, typename Event>
+  auto Enter(State &to, Data &data, const Event &event)
+      -> decltype(to.OnEnter(data, event));
 
   template <typename StateMachine, typename FromState,
             std::enable_if_t<!detail::HasName<FromState>::value ||
                                  !detail::HasName<ToState>::value,
                              bool> = true>
-  void Log(StateMachine &) {};
+  void Log(StateMachine & /*machine*/) {}
   template <typename StateMachine, typename FromState,
             std::enable_if_t<detail::HasName<FromState>::value &&
                                  detail::HasName<ToState>::value,
@@ -150,7 +148,7 @@ struct Maybe : public Either<Transitions..., DoNothing> {
 
 template <typename Data, typename InitialState, typename... States>
 StateMachine<Data, InitialState, States...>::StateMachine(
-    Data &data, InitialState initial_state, States... states) {
+    Data &data, InitialState /*initial_state**/, States... /*states*/) {
   auto state_visitor = [this, &data](auto *state) {
     InitialTransition(*state, data);
   };
@@ -199,7 +197,6 @@ auto StateMachine<Data, InitialState, States...>::InitialTransition(
 // =======================================================================
 // Implementation of TransitionTo Class
 // =======================================================================
-
 template <typename ToState>
 template <typename StateMachine, typename FromState, typename Data,
           typename... Event>
@@ -212,31 +209,29 @@ void TransitionTo<ToState>::Execute(StateMachine &machine, FromState &from,
 }
 
 template <typename ToState>
-template <typename State, typename Data, typename... Event>
-auto TransitionTo<ToState>::Exit(State &from, Data &data, const Event &...event)
+template <typename State, typename Data>
+auto TransitionTo<ToState>::Exit(State &from, Data &data)
     -> decltype(from.OnExit(data)) {
   from.OnExit(data);
 }
 
 template <typename ToState>
-template <typename State, typename Data, typename Event, typename... REvent>
-auto TransitionTo<ToState>::Exit(State &from, Data &data, const Event &event,
-                                 const REvent &...)
+template <typename State, typename Data, typename Event>
+auto TransitionTo<ToState>::Exit(State &from, Data &data, const Event &event)
     -> decltype(from.OnExit(data, event)) {
   from.OnExit(data, event);
 }
 
 template <typename ToState>
-template <typename State, typename Data, typename... Event>
-auto TransitionTo<ToState>::Enter(State &to, Data &data, const Event &...event)
+template <typename State, typename Data>
+auto TransitionTo<ToState>::Enter(State &to, Data &data)
     -> decltype(to.OnEnter(data)) {
   to.OnEnter(data);
 }
 
 template <typename ToState>
-template <typename State, typename Data, typename Event, typename... REvent>
-auto TransitionTo<ToState>::Enter(State &to, Data &data, const Event &event,
-                                  const REvent &...)
+template <typename State, typename Data, typename Event>
+auto TransitionTo<ToState>::Enter(State &to, Data &data, const Event &event)
     -> decltype(to.OnEnter(data, event)) {
   to.OnEnter(data, event);
 }
