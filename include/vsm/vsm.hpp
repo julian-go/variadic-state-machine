@@ -10,10 +10,18 @@ namespace vsm {
 
 namespace detail {
 template <typename Type, typename = void>
+constexpr bool is_complete_v = false;
+
+template <typename Type>
+constexpr bool is_complete_v<Type, decltype(void(sizeof(Type)))> = true;
+
+template <typename Type, typename = void>
 struct HasName : std::false_type {};
 
 template <typename Type>
-struct HasName<Type, std::void_t<decltype(Type::Name())>> : std::true_type {};
+struct HasName<Type, std::enable_if_t<is_complete_v<Type>,
+                                      std::void_t<decltype(Type::Name())>>>
+    : std::true_type {};
 }  // namespace detail
 
 template <typename ToState>
@@ -104,7 +112,7 @@ struct TransitionTo {
             std::enable_if_t<!detail::HasName<FromState>::value ||
                                  !detail::HasName<ToState>::value,
                              bool> = true>
-  void Log(StateMachine & /*machine*/) {}
+  void Log(StateMachine & /*machine*/);
   template <typename StateMachine, typename FromState,
             std::enable_if_t<detail::HasName<FromState>::value &&
                                  detail::HasName<ToState>::value,
@@ -234,6 +242,18 @@ template <typename State, typename Data, typename Event>
 auto TransitionTo<ToState>::Enter(State &to, Data &data, const Event &event)
     -> decltype(to.OnEnter(data, event)) {
   to.OnEnter(data, event);
+}
+
+template <typename ToState>
+template <typename StateMachine, typename FromState,
+          std::enable_if_t<!detail::HasName<FromState>::value ||
+                               !detail::HasName<ToState>::value,
+                           bool>>
+void TransitionTo<ToState>::Log(StateMachine & /*machine*/) {
+  static_assert(detail::is_complete_v<FromState>,
+                "FromState must be fully defined before use");
+  static_assert(detail::is_complete_v<ToState>,
+                "ToState must be fully defined before use");
 }
 
 template <typename ToState>
