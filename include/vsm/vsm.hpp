@@ -97,6 +97,8 @@ struct TransitionTo {
   void Exit(...) {};
   template <typename State, typename Data>
   auto Exit(State &from, Data &data) -> decltype(from.OnExit(data));
+  template <typename State, typename Data>
+  auto Exit(State &from, Data &data, ...) -> decltype(from.OnExit(data));
   template <typename State, typename Data, typename Event>
   auto Exit(State &from, Data &data, const Event &event)
       -> decltype(from.OnExit(data, event));
@@ -104,6 +106,8 @@ struct TransitionTo {
   void Enter(...) {};
   template <typename State, typename Data>
   auto Enter(State &to, Data &data) -> decltype(to.OnEnter(data));
+  template <typename State, typename Data>
+  auto Enter(State &to, Data &data, ...) -> decltype(to.OnEnter(data));
   template <typename State, typename Data, typename Event>
   auto Enter(State &to, Data &data, const Event &event)
       -> decltype(to.OnEnter(data, event));
@@ -224,6 +228,13 @@ auto TransitionTo<ToState>::Exit(State &from, Data &data)
 }
 
 template <typename ToState>
+template <typename State, typename Data>
+auto TransitionTo<ToState>::Exit(State &from, Data &data, ...)
+    -> decltype(from.OnExit(data)) {
+  from.OnExit(data);
+}
+
+template <typename ToState>
 template <typename State, typename Data, typename Event>
 auto TransitionTo<ToState>::Exit(State &from, Data &data, const Event &event)
     -> decltype(from.OnExit(data, event)) {
@@ -233,6 +244,13 @@ auto TransitionTo<ToState>::Exit(State &from, Data &data, const Event &event)
 template <typename ToState>
 template <typename State, typename Data>
 auto TransitionTo<ToState>::Enter(State &to, Data &data)
+    -> decltype(to.OnEnter(data)) {
+  to.OnEnter(data);
+}
+
+template <typename ToState>
+template <typename State, typename Data>
+auto TransitionTo<ToState>::Enter(State &to, Data &data, ...)
     -> decltype(to.OnEnter(data)) {
   to.OnEnter(data);
 }
