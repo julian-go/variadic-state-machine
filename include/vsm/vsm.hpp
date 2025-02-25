@@ -35,7 +35,7 @@ class StateMachine {
 
   /// @brief Constructs a new state machine.
   /// @param initial_state  The initial state the state machine begins in.
-  /// @param ...states      The remaining states the state machine can
+  /// @param states         The remaining states the state machine can
   /// transition to.
   explicit StateMachine(InitialState initial_state, States... states);
 
@@ -72,8 +72,7 @@ class StateMachine {
   std::tuple<InitialState, States...> states_;
 
   /// @brief Holds a pointer to the currently active state
-  std::variant<InitialState *, States *...> current_state_{
-      &std::get<0>(states_)};
+  std::variant<InitialState *, States *...> current_state_;
 
   /// @brief The logging callback
   LogCallback log_cb_;
@@ -146,8 +145,11 @@ struct Maybe : public Either<Transitions..., DoNothing> {
 // =======================================================================
 
 template <typename InitialState, typename... States>
-StateMachine<InitialState, States...>::StateMachine(
-    InitialState /*initial_state**/, States... /*states*/) {
+StateMachine<InitialState, States...>::StateMachine(InitialState initial_state,
+                                                    States... states)
+    : states_{std::forward<InitialState>(initial_state),
+              std::forward<States>(states)...},
+      current_state_{&std::get<0>(states_)} {
   auto state_visitor = [this](auto *state) { InitialTransition(*state); };
   std::visit(state_visitor, current_state_);
 }
