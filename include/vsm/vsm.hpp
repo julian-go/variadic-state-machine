@@ -28,27 +28,25 @@ template <typename ToState>
 struct TransitionTo;
 
 /// @brief An input-driven state machine for embedded applications.
-template <typename Data, typename InitialState, typename... States>
+template <typename InitialState, typename... States>
 class StateMachine {
  public:
   using LogCallback = std::function<void(std::string_view, std::string_view)>;
 
   /// @brief Constructs a new state machine.
-  /// @param data           Data shared by every state of the state machine
   /// @param initial_state  The initial state the state machine begins in.
   /// @param ...states      The remaining states the state machine can
   /// transition to.
-  explicit StateMachine(Data &data, InitialState initial_state,
-                        States... states);
+  explicit StateMachine(InitialState initial_state, States... states);
 
   /// @brief Processes the current state, calling its Process(...) function.
   /// Note: Might result in a transition.
-  void Process(Data &data);
+  void Process();
 
   /// @brief Forwards the event to the currently active state.
   /// Note: Might result in a transition.
   template <typename Event>
-  void Handle(Data &data, const Event &event);
+  void Handle(const Event &event);
 
   /// @brief Sets an optional log callback that is called for every transition
   /// @param log_cb The callback to use, syntax should take (from, to)
@@ -68,8 +66,7 @@ class StateMachine {
   /// machine
   void InitialTransition(...) {};
   template <typename State>
-  auto InitialTransition(State &state, Data &data)
-      -> decltype(state.OnEnter(data));
+  auto InitialTransition(State &state) -> decltype(state.OnEnter());
 
   /// @brief The list of states the statemachine holds, no duplicates possible
   std::tuple<InitialState, States...> states_;
@@ -88,29 +85,21 @@ class StateMachine {
 template <typename ToState>
 struct TransitionTo {
   /// @brief Executes this transition
-  template <typename StateMachine, typename FromState, typename Data,
-            typename... Event>
-  void Execute(StateMachine &machine, FromState &from, Data &data,
-               const Event &...event);
+  template <typename StateMachine, typename FromState, typename... Event>
+  void Execute(StateMachine &machine, FromState &from, const Event &...event);
 
  private:
   void Exit(...) {};
-  template <typename State, typename Data>
-  auto Exit(State &from, Data &data) -> decltype(from.OnExit(data));
-  template <typename State, typename Data>
-  auto Exit(State &from, Data &data, ...) -> decltype(from.OnExit(data));
-  template <typename State, typename Data, typename Event>
-  auto Exit(State &from, Data &data, const Event &event)
-      -> decltype(from.OnExit(data, event));
+  template <typename State>
+  auto Exit(State &from, ...) -> decltype(from.OnExit());
+  template <typename State, typename Event>
+  auto Exit(State &from, const Event &event) -> decltype(from.OnExit(event));
 
   void Enter(...) {};
-  template <typename State, typename Data>
-  auto Enter(State &to, Data &data) -> decltype(to.OnEnter(data));
-  template <typename State, typename Data>
-  auto Enter(State &to, Data &data, ...) -> decltype(to.OnEnter(data));
-  template <typename State, typename Data, typename Event>
-  auto Enter(State &to, Data &data, const Event &event)
-      -> decltype(to.OnEnter(data, event));
+  template <typename State>
+  auto Enter(State &to, ...) -> decltype(to.OnEnter());
+  template <typename State, typename Event>
+  auto Enter(State &to, const Event &event) -> decltype(to.OnEnter(event));
 
   template <typename StateMachine, typename FromState,
             std::enable_if_t<!detail::HasName<FromState>::value ||
@@ -137,10 +126,8 @@ struct Either {
   template <typename Transition>
   Either(Transition transition) : transition_{std::move(transition)} {}
 
-  template <typename StateMachine, typename FromState, typename Data,
-            typename... Event>
-  void Execute(StateMachine &machine, FromState &from, Data &data,
-               const Event &...event);
+  template <typename StateMachine, typename FromState, typename... Event>
+  void Execute(StateMachine &machine, FromState &from, const Event &...event);
 
  private:
   std::variant<Transitions...> transition_;
@@ -158,108 +145,87 @@ struct Maybe : public Either<Transitions..., DoNothing> {
 // Implementation of StateMachine Class
 // =======================================================================
 
-template <typename Data, typename InitialState, typename... States>
-StateMachine<Data, InitialState, States...>::StateMachine(
-    Data &data, InitialState /*initial_state**/, States... /*states*/) {
-  auto state_visitor = [this, &data](auto *state) {
-    InitialTransition(*state, data);
+template <typename InitialState, typename... States>
+StateMachine<InitialState, States...>::StateMachine(
+    InitialState /*initial_state**/, States... /*states*/) {
+  auto state_visitor = [this](auto *state) { InitialTransition(*state); };
+  std::visit(state_visitor, current_state_);
+}
+
+template <typename InitialState, typename... States>
+void StateMachine<InitialState, States...>::Process() {
+  auto state_visitor = [this](auto *state) {
+    state->Process().Execute(*this, *state);
   };
   std::visit(state_visitor, current_state_);
 }
 
-template <typename Data, typename InitialState, typename... States>
-void StateMachine<Data, InitialState, States...>::Process(Data &data) {
-  auto state_visitor = [this, &data](auto *state) {
-    state->Process(data).Execute(*this, *state, data);
-  };
-  std::visit(state_visitor, current_state_);
-}
-
-template <typename Data, typename InitialState, typename... States>
+template <typename InitialState, typename... States>
 template <typename Event>
-void StateMachine<Data, InitialState, States...>::Handle(Data &data,
-                                                         const Event &event) {
-  auto state_vistor = [this, &data, &event](auto *state) -> void {
-    state->Handle(data, event).Execute(*this, *state, data, event);
+void StateMachine<InitialState, States...>::Handle(const Event &event) {
+  auto state_vistor = [this, &event](auto *state) -> void {
+    state->Handle(event).Execute(*this, *state, event);
   };
   std::visit(state_vistor, current_state_);
 }
 
-template <typename Data, typename InitialState, typename... States>
-void StateMachine<Data, InitialState, States...>::SetLogCallback(
-    LogCallback log_cb) {
+template <typename InitialState, typename... States>
+void StateMachine<InitialState, States...>::SetLogCallback(LogCallback log_cb) {
   log_cb_ = std::move(log_cb);
 }
 
-template <typename Data, typename InitialState, typename... States>
+template <typename InitialState, typename... States>
 template <typename State>
-auto StateMachine<Data, InitialState, States...>::TransitionTo() -> State & {
+auto StateMachine<InitialState, States...>::TransitionTo() -> State & {
   auto &state = std::get<State>(states_);
   current_state_ = &state;
   return state;
 }
 
-template <typename Data, typename InitialState, typename... States>
+template <typename InitialState, typename... States>
 template <typename State>
-auto StateMachine<Data, InitialState, States...>::InitialTransition(
-    State &state, Data &data) -> decltype(state.OnEnter(data)) {
-  state.OnEnter(data);
+auto StateMachine<InitialState, States...>::InitialTransition(State &state)
+    -> decltype(state.OnEnter()) {
+  state.OnEnter();
 }
 
 // =======================================================================
 // Implementation of TransitionTo Class
 // =======================================================================
 template <typename ToState>
-template <typename StateMachine, typename FromState, typename Data,
-          typename... Event>
+template <typename StateMachine, typename FromState, typename... Event>
 void TransitionTo<ToState>::Execute(StateMachine &machine, FromState &from,
-                                    Data &data, const Event &...event) {
+                                    const Event &...event) {
   Log<StateMachine, FromState>(machine);
-  Exit(from, data, event...);
+  Exit(from, event...);
   auto &to = machine.template TransitionTo<ToState>();
-  Enter(to, data, event...);
+  Enter(to, event...);
 }
 
 template <typename ToState>
-template <typename State, typename Data>
-auto TransitionTo<ToState>::Exit(State &from, Data &data)
-    -> decltype(from.OnExit(data)) {
-  from.OnExit(data);
+template <typename State>
+auto TransitionTo<ToState>::Exit(State &from, ...) -> decltype(from.OnExit()) {
+  from.OnExit();
 }
 
 template <typename ToState>
-template <typename State, typename Data>
-auto TransitionTo<ToState>::Exit(State &from, Data &data, ...)
-    -> decltype(from.OnExit(data)) {
-  from.OnExit(data);
+template <typename State, typename Event>
+auto TransitionTo<ToState>::Exit(State &from, const Event &event)
+    -> decltype(from.OnExit(event)) {
+  from.OnExit(event);
 }
 
 template <typename ToState>
-template <typename State, typename Data, typename Event>
-auto TransitionTo<ToState>::Exit(State &from, Data &data, const Event &event)
-    -> decltype(from.OnExit(data, event)) {
-  from.OnExit(data, event);
+template <typename State>
+auto TransitionTo<ToState>::Enter(State &to, ...) -> decltype(to.OnEnter()) {
+  to.OnEnter();
 }
 
 template <typename ToState>
-template <typename State, typename Data>
-auto TransitionTo<ToState>::Enter(State &to, Data &data)
-    -> decltype(to.OnEnter(data)) {
-  to.OnEnter(data);
-}
-
-template <typename ToState>
-template <typename State, typename Data>
-auto TransitionTo<ToState>::Enter(State &to, Data &data, ...)
-    -> decltype(to.OnEnter(data)) {
-  to.OnEnter(data);
-}
-
-template <typename ToState>
-template <typename State, typename Data, typename Event>
-auto TransitionTo<ToState>::Enter(State &to, Data &data, const Event &event)
-    -> decltype(to.OnEnter(data, event)) {
-  to.OnEnter(data, event);
+template <typename State, typename Event>
+auto TransitionTo<ToState>::Enter(State &to, const Event &event)
+    -> decltype(to.OnEnter(event)) {
+  to.OnEnter(event);
 }
 
 template <typename ToState>
@@ -290,13 +256,12 @@ void TransitionTo<ToState>::Log(StateMachine &machine) {
 // =======================================================================
 
 template <typename... Transitions>
-template <typename StateMachine, typename FromState, typename Data,
-          typename... Event>
+template <typename StateMachine, typename FromState, typename... Event>
 void Either<Transitions...>::Execute(StateMachine &machine, FromState &from,
-                                     Data &data, const Event &...event) {
-  auto transition_visitor = [&machine, &from, &data,
+                                     const Event &...event) {
+  auto transition_visitor = [&machine, &from,
                              &event...](auto &transition) -> void {
-    transition.Execute(machine, from, data, event...);
+    transition.Execute(machine, from, event...);
   };
   std::visit(transition_visitor, transition_);
 }
