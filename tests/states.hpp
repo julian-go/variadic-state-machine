@@ -3,8 +3,6 @@
 
 #include "vsm/vsm.hpp"
 
-namespace test1 {
-
 struct Event {};
 
 struct Data {
@@ -12,7 +10,22 @@ struct Data {
   int on_enter_event_called{0};
   int process_called{0};
   int on_exit_called{0};
+  int on_enter_A_called{0};
+  int on_enter_A_event_called{0};
+  int process_A_called{0};
+  int on_exit_A_called{0};
+  int event_handled_A{0};
+  int on_enter_B_called{0};
+  int on_enter_B_event_called{0};
+  int process_B_called{0};
+  int on_exit_B_called{0};
+  int event_handled_B{0};
+  char current_state = '\0';
 };
+
+bool operator==(const Data &lhs, const Data &rhs);
+
+namespace test1 {
 
 struct State {
   explicit State(Data &d) : data{d} {}
@@ -32,20 +45,6 @@ struct StateWithOnEnter : public State {
 }  // namespace test1
 
 namespace test2 {
-
-struct Event {};
-
-struct Data {
-  int on_enter_A_called{0};
-  int process_A_called{0};
-  int on_exit_A_called{0};
-  int event_handled_A{0};
-  int on_enter_B_called{0};
-  int process_B_called{0};
-  int on_exit_B_called{0};
-  int event_handled_B{0};
-  char current_state = '\0';
-};
 
 struct StateB;
 
@@ -72,22 +71,6 @@ struct StateB {
 }  // namespace test2
 
 namespace specialized {
-
-struct Event {};
-
-struct Data {
-  int on_enter_A_called{0};
-  int on_enter_A_event_called{0};
-  int process_A_called{0};
-  int on_exit_A_called{0};
-  int event_handled_A{0};
-  int on_enter_B_called{0};
-  int on_enter_B_event_called{0};
-  int process_B_called{0};
-  int on_exit_B_called{0};
-  int event_handled_B{0};
-  char current_state = '\0';
-};
 
 struct StateB;
 
@@ -117,22 +100,6 @@ struct StateB {
 
 namespace specialized_no_default {
 
-struct Event {};
-
-struct Data {
-  int on_enter_A_called{0};
-  int on_enter_A_event_called{0};
-  int process_A_called{0};
-  int on_exit_A_called{0};
-  int event_handled_A{0};
-  int on_enter_B_called{0};
-  int on_enter_B_event_called{0};
-  int process_B_called{0};
-  int on_exit_B_called{0};
-  int event_handled_B{0};
-  char current_state = '\0';
-};
-
 struct StateB;
 
 struct StateA {
@@ -159,10 +126,6 @@ struct StateB {
 
 namespace with_log {
 
-struct Data {
-  char current_state = '\0';
-};
-
 struct StateB;
 
 struct StateA {
@@ -184,10 +147,6 @@ struct StateB {
 }  // namespace with_log
 
 namespace no_log {
-
-struct Data {
-  char current_state = '\0';
-};
 
 struct StateB;
 

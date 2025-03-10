@@ -2,6 +2,24 @@
 
 #include "vsm/vsm.hpp"
 
+bool operator==(const Data& lhs, const Data& rhs) {
+  return lhs.on_enter_called == rhs.on_enter_called &&
+         lhs.on_enter_event_called == rhs.on_enter_event_called &&
+         lhs.process_called == rhs.process_called &&
+         lhs.on_exit_called == rhs.on_exit_called &&
+         lhs.on_enter_A_called == rhs.on_enter_A_called &&
+         lhs.on_enter_A_event_called == rhs.on_enter_A_event_called &&
+         lhs.process_A_called == rhs.process_A_called &&
+         lhs.on_exit_A_called == rhs.on_exit_A_called &&
+         lhs.event_handled_A == rhs.event_handled_A &&
+         lhs.on_enter_B_called == rhs.on_enter_B_called &&
+         lhs.on_enter_B_event_called == rhs.on_enter_B_event_called &&
+         lhs.process_B_called == rhs.process_B_called &&
+         lhs.on_exit_B_called == rhs.on_exit_B_called &&
+         lhs.event_handled_B == rhs.event_handled_B &&
+         lhs.current_state == rhs.current_state;
+}
+
 namespace test1 {
 
 void State::OnEnter(const Event& /*event*/) { data.on_enter_event_called++; }

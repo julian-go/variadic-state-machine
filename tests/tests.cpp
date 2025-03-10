@@ -5,233 +5,188 @@
 #include "vsm/vsm.hpp"
 
 TEST_CASE("Process called") {
-  auto data = test1::Data{};
+  auto data = Data{};
+  auto expected = data;
 
   auto sm = vsm::StateMachine(test1::StateWithOnEnter{data});
 
-  CHECK(data.on_enter_called == 1);
-  CHECK(data.on_enter_event_called == 0);
-  CHECK(data.process_called == 0);
-  CHECK(data.on_exit_called == 0);
+  expected.on_enter_called++;
+  CHECK(data == expected);
 
   sm.Process();
   sm.Process();
   sm.Process();
 
-  CHECK(data.on_enter_called == 1);
-  CHECK(data.on_enter_event_called == 0);
-  CHECK(data.process_called == 3);
-  CHECK(data.on_exit_called == 0);
+  expected.process_called += 3;
+  CHECK(data == expected);
 }
 
 TEST_CASE("On Enter not called") {
-  auto data = test1::Data{};
+  auto data = Data{};
+  auto expected = data;
 
   auto sm = vsm::StateMachine(test1::State{data});
 
-  CHECK(data.on_enter_called == 0);
-  CHECK(data.on_enter_event_called == 0);
-  CHECK(data.process_called == 0);
-  CHECK(data.on_exit_called == 0);
+  CHECK(data == expected);
 
   sm.Process();
   sm.Process();
   sm.Process();
 
-  CHECK(data.on_enter_called == 0);
-  CHECK(data.on_enter_event_called == 0);
-  CHECK(data.process_called == 3);
-  CHECK(data.on_exit_called == 0);
+  expected.process_called += 3;
+  CHECK(data == expected);
 }
 
 TEST_CASE("Process State Transition") {
-  auto data = test2::Data{};
+  auto data = Data{};
+  auto expected = data;
 
   auto sm = vsm::StateMachine(test2::StateA{data}, test2::StateB{data});
 
-  CHECK(data.on_enter_A_called == 1);
-  CHECK(data.process_A_called == 0);
-  CHECK(data.current_state == 'A');
+  expected.on_enter_A_called++;
+  expected.current_state = 'A';
+  CHECK(data == expected);
 
   sm.Process();
 
-  CHECK(data.on_enter_A_called == 1);
-  CHECK(data.process_A_called == 1);
-  CHECK(data.current_state == 'A');
+  expected.process_A_called++;
+  CHECK(data == expected);
 
   sm.Process();
 
-  CHECK(data.on_enter_A_called == 1);
-  CHECK(data.process_A_called == 2);
-  CHECK(data.on_exit_A_called == 1);
-  CHECK(data.on_enter_B_called == 1);
-  CHECK(data.process_B_called == 0);
-  CHECK(data.current_state == 'B');
+  expected.process_A_called++;
+  expected.on_exit_A_called++;
+  expected.on_enter_B_called++;
+  expected.current_state = 'B';
+  CHECK(data == expected);
 
   sm.Process();
 
-  CHECK(data.on_enter_B_called == 1);
-  CHECK(data.process_B_called == 1);
-  CHECK(data.current_state == 'B');
+  expected.process_B_called++;
+  CHECK(data == expected);
 
   sm.Process();
 
-  CHECK(data.on_enter_A_called == 2);
-  CHECK(data.process_A_called == 2);
-  CHECK(data.on_exit_A_called == 1);
-  CHECK(data.on_enter_B_called == 1);
-  CHECK(data.process_B_called == 2);
-  CHECK(data.on_exit_B_called == 1);
-  CHECK(data.current_state == 'A');
+  expected.on_enter_A_called++;
+  expected.process_B_called++;
+  expected.on_exit_B_called++;
+  expected.current_state = 'A';
+  CHECK(data == expected);
 }
 
 TEST_CASE("Event State Transition") {
-  auto data = test2::Data{};
+  auto data = Data{};
+  auto expected = data;
 
   auto sm = vsm::StateMachine(test2::StateA{data}, test2::StateB{data});
 
-  CHECK(data.on_enter_A_called == 1);
-  CHECK(data.process_A_called == 0);
-  CHECK(data.event_handled_A == 0);
-  CHECK(data.current_state == 'A');
+  expected.on_enter_A_called++;
+  expected.current_state = 'A';
+  CHECK(data == expected);
 
-  sm.Handle(test2::Event{});
+  sm.Handle(Event{});
 
-  CHECK(data.on_enter_A_called == 1);
-  CHECK(data.on_enter_B_called == 0);
-  CHECK(data.process_A_called == 0);
-  CHECK(data.event_handled_A == 1);
-  CHECK(data.current_state == 'A');
+  expected.event_handled_A++;
+  CHECK(data == expected);
 
-  sm.Handle(test2::Event{});
+  sm.Handle(Event{});
 
-  CHECK(data.on_enter_A_called == 1);
-  CHECK(data.on_enter_B_called == 1);
-  CHECK(data.process_A_called == 0);
-  CHECK(data.process_B_called == 0);
-  CHECK(data.on_exit_A_called == 1);
-  CHECK(data.event_handled_A == 2);
-  CHECK(data.event_handled_B == 0);
-  CHECK(data.current_state == 'B');
+  expected.event_handled_A++;
+  expected.on_enter_B_called++;
+  expected.on_exit_A_called++;
+  expected.current_state = 'B';
+  CHECK(data == expected);
 
-  sm.Handle(test2::Event{});
-  sm.Handle(test2::Event{});
+  sm.Handle(Event{});
 
-  CHECK(data.on_enter_A_called == 2);
-  CHECK(data.on_enter_B_called == 1);
-  CHECK(data.process_A_called == 0);
-  CHECK(data.process_B_called == 0);
-  CHECK(data.on_exit_A_called == 1);
-  CHECK(data.on_exit_B_called == 1);
-  CHECK(data.event_handled_A == 2);
-  CHECK(data.event_handled_B == 2);
-  CHECK(data.current_state == 'A');
+  expected.event_handled_B++;
+  CHECK(data == expected);
+
+  sm.Handle(Event{});
+
+  expected.event_handled_B++;
+  expected.on_enter_A_called++;
+  expected.on_exit_B_called++;
+  expected.current_state = 'A';
+  CHECK(data == expected);
 }
 
 TEST_CASE("Specialized Event State Transition") {
-  auto data = specialized::Data{};
+  auto data = Data{};
+  auto expected = data;
 
   auto sm =
       vsm::StateMachine(specialized::StateA{data}, specialized::StateB{data});
 
-  CHECK(data.on_enter_A_called == 1);
-  CHECK(data.on_enter_A_event_called == 0);
-  CHECK(data.process_A_called == 0);
-  CHECK(data.event_handled_A == 0);
-  CHECK(data.current_state == 'A');
+  expected.on_enter_A_called++;
+  expected.current_state = 'A';
+  CHECK(data == expected);
 
-  sm.Handle(specialized::Event{});
+  sm.Handle(Event{});
 
-  CHECK(data.on_enter_A_called == 1);
-  CHECK(data.on_enter_B_called == 0);
-  CHECK(data.on_enter_A_event_called == 0);
-  CHECK(data.on_enter_B_event_called == 0);
-  CHECK(data.process_A_called == 0);
-  CHECK(data.event_handled_A == 1);
-  CHECK(data.current_state == 'A');
+  expected.event_handled_A++;
+  CHECK(data == expected);
 
-  sm.Handle(specialized::Event{});
+  sm.Handle(Event{});
 
-  CHECK(data.on_enter_A_called == 1);
-  CHECK(data.on_enter_B_called == 0);
-  CHECK(data.on_enter_A_event_called == 0);
-  CHECK(data.on_enter_B_event_called == 1);
-  CHECK(data.process_A_called == 0);
-  CHECK(data.process_B_called == 0);
-  CHECK(data.on_exit_A_called == 1);
-  CHECK(data.event_handled_A == 2);
-  CHECK(data.event_handled_B == 0);
-  CHECK(data.current_state == 'B');
+  expected.event_handled_A++;
+  expected.on_enter_B_event_called++;
+  expected.on_exit_A_called++;
+  expected.current_state = 'B';
+  CHECK(data == expected);
 
-  sm.Handle(specialized::Event{});
-  sm.Handle(specialized::Event{});
+  sm.Handle(Event{});
 
-  CHECK(data.on_enter_A_called == 1);
-  CHECK(data.on_enter_B_called == 0);
-  CHECK(data.on_enter_A_event_called == 1);
-  CHECK(data.on_enter_B_event_called == 1);
-  CHECK(data.process_A_called == 0);
-  CHECK(data.process_B_called == 0);
-  CHECK(data.on_exit_A_called == 1);
-  CHECK(data.on_exit_B_called == 1);
-  CHECK(data.event_handled_A == 2);
-  CHECK(data.event_handled_B == 2);
-  CHECK(data.current_state == 'A');
+  expected.event_handled_B++;
+  CHECK(data == expected);
+
+  sm.Handle(Event{});
+
+  expected.event_handled_B++;
+  expected.on_enter_A_event_called++;
+  expected.on_exit_B_called++;
+  expected.current_state = 'A';
+  CHECK(data == expected);
 }
 
 TEST_CASE("Specialized Event State Transition without Default") {
-  auto data = specialized_no_default::Data{};
+  auto data = Data{};
+  auto expected = data;
 
   auto sm = vsm::StateMachine(specialized_no_default::StateA{data},
                               specialized_no_default::StateB{data});
 
-  CHECK(data.on_enter_A_called == 0);
-  CHECK(data.on_enter_A_event_called == 0);
-  CHECK(data.process_A_called == 0);
-  CHECK(data.event_handled_A == 0);
-  CHECK(data.current_state == '\0');
+  CHECK(data == expected);
 
-  sm.Handle(specialized_no_default::Event{});
+  sm.Handle(Event{});
 
-  CHECK(data.on_enter_A_called == 0);
-  CHECK(data.on_enter_B_called == 0);
-  CHECK(data.on_enter_A_event_called == 0);
-  CHECK(data.on_enter_B_event_called == 0);
-  CHECK(data.process_A_called == 0);
-  CHECK(data.event_handled_A == 1);
-  CHECK(data.current_state == '\0');
+  expected.event_handled_A++;
+  CHECK(data == expected);
 
-  sm.Handle(specialized_no_default::Event{});
+  sm.Handle(Event{});
 
-  CHECK(data.on_enter_A_called == 0);
-  CHECK(data.on_enter_B_called == 0);
-  CHECK(data.on_enter_A_event_called == 0);
-  CHECK(data.on_enter_B_event_called == 1);
-  CHECK(data.process_A_called == 0);
-  CHECK(data.process_B_called == 0);
-  CHECK(data.on_exit_A_called == 1);
-  CHECK(data.event_handled_A == 2);
-  CHECK(data.event_handled_B == 0);
-  CHECK(data.current_state == 'B');
+  expected.event_handled_A++;
+  expected.on_enter_B_event_called++;
+  expected.on_exit_A_called++;
+  expected.current_state = 'B';
+  CHECK(data == expected);
 
-  sm.Handle(specialized_no_default::Event{});
-  sm.Handle(specialized_no_default::Event{});
+  sm.Handle(Event{});
 
-  CHECK(data.on_enter_A_called == 0);
-  CHECK(data.on_enter_B_called == 0);
-  CHECK(data.on_enter_A_event_called == 1);
-  CHECK(data.on_enter_B_event_called == 1);
-  CHECK(data.process_A_called == 0);
-  CHECK(data.process_B_called == 0);
-  CHECK(data.on_exit_A_called == 1);
-  CHECK(data.on_exit_B_called == 1);
-  CHECK(data.event_handled_A == 2);
-  CHECK(data.event_handled_B == 2);
-  CHECK(data.current_state == 'A');
+  expected.event_handled_B++;
+  CHECK(data == expected);
+
+  sm.Handle(Event{});
+
+  expected.event_handled_B++;
+  expected.on_enter_A_event_called++;
+  expected.on_exit_B_called++;
+  expected.current_state = 'A';
+  CHECK(data == expected);
 }
 
 TEST_CASE("Logcallback executed") {
-  auto data = with_log::Data{};
+  auto data = Data{};
   int num_log_calls = 0;
   std::string from = "";
   std::string to = "";
@@ -262,7 +217,7 @@ TEST_CASE("Logcallback executed") {
 }
 
 TEST_CASE("Logcallback not executed") {
-  auto data = no_log::Data{};
+  auto data = Data{};
   int num_log_calls = 0;
 
   auto sm = vsm::StateMachine(no_log::StateA{data}, no_log::StateB{data});
