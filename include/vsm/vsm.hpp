@@ -9,7 +9,7 @@
 //
 // The above copyright notice and this permission notice shall be included in
 // all copies or substantial portions of the Software.
-// 
+//
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+#include <iostream>
 #ifndef VARIADICSTATEMACHINE_VSM_H_
 #define VARIADICSTATEMACHINE_VSM_H_
 
@@ -29,19 +30,29 @@
 namespace vsm {
 
 namespace detail {
-template <typename Type, typename = void>
+template <typename T, typename = void>
 constexpr bool is_complete_v = false;
 
-template <typename Type>
-constexpr bool is_complete_v<Type, decltype(void(sizeof(Type)))> = true;
+template <typename T>
+constexpr bool is_complete_v<T, decltype(void(sizeof(T)))> = true;
 
-template <typename Type, typename = void>
+template <typename T, typename = void>
 struct HasName : std::false_type {};
 
-template <typename Type>
-struct HasName<Type, std::enable_if_t<is_complete_v<Type>,
-                                      std::void_t<decltype(Type::Name())>>>
+template <typename T>
+struct HasName<
+    T, std::enable_if_t<is_complete_v<T>, std::void_t<decltype(T::Name())>>>
     : std::true_type {};
+
+template <typename, typename = std::void_t<>>
+struct HasOnEnter : std::false_type {};
+
+template <typename T>
+struct HasOnEnter<
+    T, std::enable_if_t<is_complete_v<T>,
+                        std::void_t<decltype(std::declval<T>().OnEnter())>>>
+    : std::true_type {};
+
 }  // namespace detail
 
 template <typename ToState>
@@ -84,9 +95,8 @@ class StateMachine {
 
   /// @brief The initial transition is called upon construction of the state
   /// machine
-  void InitialTransition(...) {};
   template <typename State>
-  auto InitialTransition(State &state) -> decltype(state.OnEnter());
+  auto InitialTransition(State &state) -> void;
 
   /// @brief The list of states the statemachine holds, no duplicates possible
   std::tuple<InitialState, States...> states_;
@@ -120,15 +130,7 @@ struct TransitionTo {
   template <typename State, typename Event>
   auto Enter(State &to, const Event &event) -> decltype(to.OnEnter(event));
 
-  template <typename StateMachine, typename FromState,
-            std::enable_if_t<!detail::HasName<FromState>::value ||
-                                 !detail::HasName<ToState>::value,
-                             bool> = true>
-  void Log(StateMachine & /*machine*/);
-  template <typename StateMachine, typename FromState,
-            std::enable_if_t<detail::HasName<FromState>::value &&
-                                 detail::HasName<ToState>::value,
-                             bool> = true>
+  template <typename StateMachine, typename FromState>
   void Log(StateMachine &machine);
 };
 
@@ -207,8 +209,14 @@ auto StateMachine<InitialState, States...>::TransitionTo() -> State & {
 template <typename InitialState, typename... States>
 template <typename State>
 auto StateMachine<InitialState, States...>::InitialTransition(State &state)
-    -> decltype(state.OnEnter()) {
-  state.OnEnter();
+    -> void {
+  if constexpr (detail::HasOnEnter<State>::value) {
+    state.OnEnter();
+  } else {
+    static_assert(
+        detail::is_complete_v<State>,
+        "State must be fully defined before calling InitialTransition.");
+  }
 }
 
 // =======================================================================
@@ -251,25 +259,18 @@ auto TransitionTo<ToState>::Enter(State &to, const Event &event)
 }
 
 template <typename ToState>
-template <typename StateMachine, typename FromState,
-          std::enable_if_t<!detail::HasName<FromState>::value ||
-                               !detail::HasName<ToState>::value,
-                           bool>>
-void TransitionTo<ToState>::Log(StateMachine & /*machine*/) {
-  static_assert(detail::is_complete_v<FromState>,
-                "FromState must be fully defined before use");
-  static_assert(detail::is_complete_v<ToState>,
-                "ToState must be fully defined before use");
-}
-
-template <typename ToState>
-template <typename StateMachine, typename FromState,
-          std::enable_if_t<detail::HasName<FromState>::value &&
-                               detail::HasName<ToState>::value,
-                           bool>>
+template <typename StateMachine, typename FromState>
 void TransitionTo<ToState>::Log(StateMachine &machine) {
-  if (machine.log_cb_) {
-    machine.log_cb_(FromState::Name(), ToState::Name());
+  if constexpr (detail::HasName<FromState>::value &&
+                detail::HasName<ToState>::value) {
+    if (machine.log_cb_) {
+      machine.log_cb_(FromState::Name(), ToState::Name());
+    }
+  } else {
+    static_assert(detail::is_complete_v<FromState>,
+                  "State must be fully defined before performing transition.");
+    static_assert(detail::is_complete_v<ToState>,
+                  "State must be fully defined before performing transition.");
   }
 }
 
