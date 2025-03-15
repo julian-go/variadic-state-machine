@@ -18,7 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-#include <iostream>
 #ifndef VARIADICSTATEMACHINE_VSM_H_
 #define VARIADICSTATEMACHINE_VSM_H_
 
@@ -78,6 +77,12 @@ class StateMachine {
   /// Note: Might result in a transition.
   template <typename Event>
   void Handle(const Event &event);
+
+  /// @brief Checks if the state machine is currently in a specific state.
+  template <typename State>
+  [[nodiscard]] auto IsInState() const -> bool {
+    return std::holds_alternative<State *>(current_state_);
+  }
 
   /// @brief Sets an optional log callback that is called for every transition
   /// @param log_cb The callback to use, syntax should take (from, to)
@@ -154,7 +159,7 @@ struct Either {
   std::variant<Transitions...> transition_;
 };
 
-/// @brief Convenience transition that can contain differnt transitions or
+/// @brief Convenience transition that can contain different transitions or
 /// nothing.
 /// @tparam ...Transitions  The transitions that can be contained
 template <typename... Transitions>
@@ -201,6 +206,9 @@ void StateMachine<InitialState, States...>::SetLogCallback(LogCallback log_cb) {
 template <typename InitialState, typename... States>
 template <typename State>
 auto StateMachine<InitialState, States...>::TransitionTo() -> State & {
+  static_assert((std::is_same_v<State, InitialState> ||
+                 (std::is_same_v<State, States> || ...)),
+                "Invalid state transition: State not part of state machine");
   auto &state = std::get<State>(states_);
   current_state_ = &state;
   return state;
@@ -268,9 +276,9 @@ void TransitionTo<ToState>::Log(StateMachine &machine) {
     }
   } else {
     static_assert(detail::is_complete_v<FromState>,
-                  "State must be fully defined before performing transition.");
+                  "FromState must be fully defined.");
     static_assert(detail::is_complete_v<ToState>,
-                  "State must be fully defined before performing transition.");
+                  "ToState must be fully defined.");
   }
 }
 
