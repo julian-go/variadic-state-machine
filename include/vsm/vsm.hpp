@@ -52,6 +52,15 @@ struct HasOnEnter<
                         std::void_t<decltype(std::declval<T>().OnEnter())>>>
     : std::true_type {};
 
+template <typename, typename = std::void_t<>>
+struct HasProcess : std::false_type {};
+
+template <typename T>
+struct HasProcess<
+    T, std::enable_if_t<is_complete_v<T>,
+                        std::void_t<decltype(std::declval<T>().Process())>>>
+    : std::true_type {};
+
 }  // namespace detail
 
 template <typename ToState>
@@ -184,7 +193,12 @@ StateMachine<InitialState, States...>::StateMachine(InitialState initial_state,
 template <typename InitialState, typename... States>
 void StateMachine<InitialState, States...>::Process() {
   auto state_visitor = [this](auto *state) {
-    state->Process().Execute(*this, *state);
+    if constexpr (detail::HasProcess<
+                      std::remove_pointer_t<decltype(state)>>::value) {
+      state->Process().Execute(*this, *state);
+    } else {
+      DoNothing{}.Execute(*this, *state);
+    }
   };
   std::visit(state_visitor, current_state_);
 }
