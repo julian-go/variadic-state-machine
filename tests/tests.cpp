@@ -4,269 +4,271 @@
 #include "states.hpp"
 #include "vsm/vsm.hpp"
 
-TEST_CASE("Process called") {
-  auto data = Data{};
-  auto expected = data;
+namespace test_constants {
+constexpr char kStateA = 'A';
+constexpr char kStateB = 'B';
+constexpr std::string_view kStateAName = "StateA";
+constexpr std::string_view kStateBName = "StateB";
+}  // namespace test_constants
 
-  auto sm = vsm::StateMachine(test1::StateWithOnEnter{data});
+struct StateMachineFixture {
+  Data data{};
+  Data expected{};
+  std::string from{"n/a"};
+  std::string to{"n/a"};
 
-  expected.on_enter_called++;
-  CHECK(data == expected);
+  auto MakeLogCallback() {
+    return [this](auto from_state, auto to_state) {
+      from = from_state;
+      to = to_state;
+    };
+  }
+};
 
-  sm.Process();
-  sm.Process();
-  sm.Process();
+TEST_SUITE("Basic State Machine Functionality") {
+  TEST_CASE_FIXTURE(StateMachineFixture, "Process called") {
+    auto sm = vsm::StateMachine(test1::StateWithOnEnter{data});
 
-  expected.process_called += 3;
-  CHECK(data == expected);
+    expected.on_enter_called++;
+    CHECK(data == expected);
+
+    sm.Process();
+    sm.Process();
+    sm.Process();
+
+    expected.process_called += 3;
+    CHECK(data == expected);
+  }
+
+  TEST_CASE_FIXTURE(StateMachineFixture, "State without process call") {
+    auto sm =
+        vsm::StateMachine(no_process::StateA{data}, no_process::StateB{data});
+
+    CHECK(sm.IsInState<no_process::StateA>());
+    sm.Handle(Event{});
+    CHECK(sm.IsInState<no_process::StateB>());
+    sm.Handle(Event{});
+    CHECK(sm.IsInState<no_process::StateA>());
+    sm.Handle(Event{});
+    CHECK(sm.IsInState<no_process::StateB>());
+    sm.Handle(Event{});
+    CHECK(sm.IsInState<no_process::StateA>());
+    sm.Handle(Event{});
+    CHECK(sm.IsInState<no_process::StateB>());
+  }
+
+  TEST_CASE_FIXTURE(StateMachineFixture, "On Enter not called") {
+    auto sm = vsm::StateMachine(test1::State{data});
+
+    CHECK(data == expected);
+
+    sm.Process();
+    sm.Process();
+    sm.Process();
+
+    expected.process_called += 3;
+    CHECK(data == expected);
+  }
 }
 
-TEST_CASE("On Enter not called") {
-  auto data = Data{};
-  auto expected = data;
+TEST_SUITE("State Transitions") {
+  TEST_CASE_FIXTURE(StateMachineFixture, "Process State Transition") {
+    auto sm = vsm::StateMachine(test2::StateA{data}, test2::StateB{data});
 
-  auto sm = vsm::StateMachine(test1::State{data});
+    expected.on_enter_A_called++;
+    expected.current_state = test_constants::kStateA;
+    CHECK(data == expected);
 
-  CHECK(data == expected);
+    sm.Process();
 
-  sm.Process();
-  sm.Process();
-  sm.Process();
+    expected.process_A_called++;
+    CHECK(data == expected);
 
-  expected.process_called += 3;
-  CHECK(data == expected);
+    sm.Process();
+
+    expected.process_A_called++;
+    expected.on_exit_A_called++;
+    expected.on_enter_B_called++;
+    expected.current_state = test_constants::kStateB;
+    CHECK(data == expected);
+
+    sm.Process();
+
+    expected.process_B_called++;
+    CHECK(data == expected);
+
+    sm.Process();
+
+    expected.on_enter_A_called++;
+    expected.process_B_called++;
+    expected.on_exit_B_called++;
+    expected.current_state = test_constants::kStateA;
+    CHECK(data == expected);
+  }
+
+  TEST_CASE_FIXTURE(StateMachineFixture, "Event State Transition") {
+    auto sm = vsm::StateMachine(test2::StateA{data}, test2::StateB{data});
+
+    expected.on_enter_A_called++;
+    expected.current_state = test_constants::kStateA;
+    CHECK(data == expected);
+
+    sm.Handle(Event{});
+
+    expected.event_handled_A++;
+    CHECK(data == expected);
+
+    sm.Handle(Event{});
+
+    expected.event_handled_A++;
+    expected.on_enter_B_called++;
+    expected.on_exit_A_called++;
+    expected.current_state = test_constants::kStateB;
+    CHECK(data == expected);
+
+    sm.Handle(Event{});
+
+    expected.event_handled_B++;
+    CHECK(data == expected);
+
+    sm.Handle(Event{});
+
+    expected.event_handled_B++;
+    expected.on_enter_A_called++;
+    expected.on_exit_B_called++;
+    expected.current_state = test_constants::kStateA;
+    CHECK(data == expected);
+  }
+
+  TEST_CASE_FIXTURE(StateMachineFixture, "Specialized Event State Transition") {
+    auto sm =
+        vsm::StateMachine(specialized::StateA{data}, specialized::StateB{data});
+
+    expected.on_enter_A_called++;
+    expected.current_state = test_constants::kStateA;
+    CHECK(data == expected);
+
+    sm.Handle(Event{});
+
+    expected.event_handled_A++;
+    CHECK(data == expected);
+    CHECK(sm.IsInState<specialized::StateA>());
+
+    sm.Handle(Event{});
+
+    expected.event_handled_A++;
+    expected.on_enter_B_event_called++;
+    expected.on_exit_A_called++;
+    expected.current_state = test_constants::kStateB;
+    CHECK(data == expected);
+    CHECK(sm.IsInState<specialized::StateB>());
+
+    sm.Handle(Event{});
+
+    expected.event_handled_B++;
+    CHECK(data == expected);
+
+    sm.Handle(Event{});
+
+    expected.event_handled_B++;
+    expected.on_enter_A_event_called++;
+    expected.on_exit_B_called++;
+    expected.current_state = test_constants::kStateA;
+    CHECK(data == expected);
+  }
+
+  TEST_CASE_FIXTURE(StateMachineFixture,
+                    "Specialized Event State Transition without Default") {
+    auto sm = vsm::StateMachine(specialized_no_default::StateA{data},
+                                specialized_no_default::StateB{data});
+
+    CHECK(data == expected);
+
+    sm.Handle(Event{});
+
+    expected.event_handled_A++;
+    CHECK(data == expected);
+
+    sm.Handle(Event{});
+
+    expected.event_handled_A++;
+    expected.on_enter_B_event_called++;
+    expected.on_exit_A_called++;
+    expected.current_state = test_constants::kStateB;
+    CHECK(data == expected);
+
+    sm.Handle(Event{});
+
+    expected.event_handled_B++;
+    CHECK(data == expected);
+
+    sm.Handle(Event{});
+
+    expected.event_handled_B++;
+    expected.on_enter_A_event_called++;
+    expected.on_exit_B_called++;
+    expected.current_state = test_constants::kStateA;
+    CHECK(data == expected);
+  }
 }
 
-TEST_CASE("Process State Transition") {
-  auto data = Data{};
-  auto expected = data;
+TEST_SUITE("Logging") {
+  TEST_CASE_FIXTURE(StateMachineFixture, "Logcallback executed") {
+    int num_log_calls = 0;
+    auto sm = vsm::StateMachine(with_log::StateA{data}, with_log::StateB{data});
 
-  auto sm = vsm::StateMachine(test2::StateA{data}, test2::StateB{data});
+    sm.SetLogCallback([&](auto from_state, auto to_state) {
+      num_log_calls++;
+      from = from_state;
+      to = to_state;
+    });
 
-  expected.on_enter_A_called++;
-  expected.current_state = 'A';
-  CHECK(data == expected);
+    CHECK(data.current_state == test_constants::kStateA);
 
-  sm.Process();
+    sm.Process();
 
-  expected.process_A_called++;
-  CHECK(data == expected);
+    CHECK(data.current_state == test_constants::kStateB);
+    CHECK(num_log_calls == 1);
+    CHECK(from == test_constants::kStateAName);
+    CHECK(to == test_constants::kStateBName);
 
-  sm.Process();
+    sm.Process();
 
-  expected.process_A_called++;
-  expected.on_exit_A_called++;
-  expected.on_enter_B_called++;
-  expected.current_state = 'B';
-  CHECK(data == expected);
+    CHECK(data.current_state == test_constants::kStateA);
+    CHECK(num_log_calls == 2);
+    CHECK(from == test_constants::kStateBName);
+    CHECK(to == test_constants::kStateAName);
+  }
 
-  sm.Process();
+  TEST_CASE_FIXTURE(StateMachineFixture, "Logcallback not executed") {
+    int num_log_calls = 0;
+    auto sm = vsm::StateMachine(no_log::StateA{data}, no_log::StateB{data});
 
-  expected.process_B_called++;
-  CHECK(data == expected);
+    sm.SetLogCallback(
+        [&](auto /* from_state */, auto /* to_state */) { num_log_calls++; });
 
-  sm.Process();
+    CHECK(data.current_state == test_constants::kStateA);
 
-  expected.on_enter_A_called++;
-  expected.process_B_called++;
-  expected.on_exit_B_called++;
-  expected.current_state = 'A';
-  CHECK(data == expected);
+    sm.Process();
+
+    CHECK(data.current_state == test_constants::kStateB);
+    CHECK(num_log_calls == 0);
+
+    sm.Process();
+
+    CHECK(data.current_state == test_constants::kStateA);
+    CHECK(num_log_calls == 0);
+  }
 }
 
-TEST_CASE("Event State Transition") {
-  auto data = Data{};
-  auto expected = data;
-
-  auto sm = vsm::StateMachine(test2::StateA{data}, test2::StateB{data});
-
-  expected.on_enter_A_called++;
-  expected.current_state = 'A';
-  CHECK(data == expected);
-
-  sm.Handle(Event{});
-
-  expected.event_handled_A++;
-  CHECK(data == expected);
-
-  sm.Handle(Event{});
-
-  expected.event_handled_A++;
-  expected.on_enter_B_called++;
-  expected.on_exit_A_called++;
-  expected.current_state = 'B';
-  CHECK(data == expected);
-
-  sm.Handle(Event{});
-
-  expected.event_handled_B++;
-  CHECK(data == expected);
-
-  sm.Handle(Event{});
-
-  expected.event_handled_B++;
-  expected.on_enter_A_called++;
-  expected.on_exit_B_called++;
-  expected.current_state = 'A';
-  CHECK(data == expected);
-}
-
-TEST_CASE("Specialized Event State Transition") {
-  auto data = Data{};
-  auto expected = data;
-
-  auto sm =
-      vsm::StateMachine(specialized::StateA{data}, specialized::StateB{data});
-
-  expected.on_enter_A_called++;
-  expected.current_state = 'A';
-  CHECK(data == expected);
-
-  sm.Handle(Event{});
-
-  expected.event_handled_A++;
-  CHECK(data == expected);
-  CHECK(sm.IsInState<specialized::StateA>());
-
-  sm.Handle(Event{});
-
-  expected.event_handled_A++;
-  expected.on_enter_B_event_called++;
-  expected.on_exit_A_called++;
-  expected.current_state = 'B';
-  CHECK(data == expected);
-  CHECK(sm.IsInState<specialized::StateB>());
-
-  sm.Handle(Event{});
-
-  expected.event_handled_B++;
-  CHECK(data == expected);
-
-  sm.Handle(Event{});
-
-  expected.event_handled_B++;
-  expected.on_enter_A_event_called++;
-  expected.on_exit_B_called++;
-  expected.current_state = 'A';
-  CHECK(data == expected);
-}
-
-TEST_CASE("Specialized Event State Transition without Default") {
-  auto data = Data{};
-  auto expected = data;
-
-  auto sm = vsm::StateMachine(specialized_no_default::StateA{data},
-                              specialized_no_default::StateB{data});
-
-  CHECK(data == expected);
-
-  sm.Handle(Event{});
-
-  expected.event_handled_A++;
-  CHECK(data == expected);
-
-  sm.Handle(Event{});
-
-  expected.event_handled_A++;
-  expected.on_enter_B_event_called++;
-  expected.on_exit_A_called++;
-  expected.current_state = 'B';
-  CHECK(data == expected);
-
-  sm.Handle(Event{});
-
-  expected.event_handled_B++;
-  CHECK(data == expected);
-
-  sm.Handle(Event{});
-
-  expected.event_handled_B++;
-  expected.on_enter_A_event_called++;
-  expected.on_exit_B_called++;
-  expected.current_state = 'A';
-  CHECK(data == expected);
-}
-
-TEST_CASE("Logcallback executed") {
-  auto data = Data{};
-  int num_log_calls = 0;
-  std::string from = "";
-  std::string to = "";
-
-  auto sm = vsm::StateMachine(with_log::StateA{data}, with_log::StateB{data});
-
-  sm.SetLogCallback([&](auto from_state, auto to_state) {
-    num_log_calls++;
-    from = from_state;
-    to = to_state;
-  });
-
-  CHECK(data.current_state == 'A');
-
-  sm.Process();
-
-  CHECK(data.current_state == 'B');
-  CHECK(num_log_calls == 1);
-  CHECK(from == "StateA");
-  CHECK(to == "StateB");
-
-  sm.Process();
-
-  CHECK(data.current_state == 'A');
-  CHECK(num_log_calls == 2);
-  CHECK(from == "StateB");
-  CHECK(to == "StateA");
-}
-
-TEST_CASE("Logcallback not executed") {
-  auto data = Data{};
-  int num_log_calls = 0;
-
-  auto sm = vsm::StateMachine(no_log::StateA{data}, no_log::StateB{data});
-
-  sm.SetLogCallback(
-      [&](auto /* from_state */, auto /* to_state */) { num_log_calls++; });
-
-  CHECK(data.current_state == 'A');
-
-  sm.Process();
-
-  CHECK(data.current_state == 'B');
-  CHECK(num_log_calls == 0);
-
-  sm.Process();
-
-  CHECK(data.current_state == 'A');
-  CHECK(num_log_calls == 0);
-}
-
-TEST_CASE("State without process call") {
-  auto data = Data{};
-
-  auto sm =
-      vsm::StateMachine(no_process::StateA{data}, no_process::StateB{data});
-
-  CHECK(sm.IsInState<no_process::StateA>());
-  sm.Handle(Event{});
-  CHECK(sm.IsInState<no_process::StateB>());
-  sm.Handle(Event{});
-  CHECK(sm.IsInState<no_process::StateA>());
-  sm.Handle(Event{});
-  CHECK(sm.IsInState<no_process::StateB>());
-  sm.Handle(Event{});
-  CHECK(sm.IsInState<no_process::StateA>());
-  sm.Handle(Event{});
-  CHECK(sm.IsInState<no_process::StateB>());
-}
-
-TEST_CASE("Test forward declarations") {
+TEST_CASE_FIXTURE(StateMachineFixture, "Test forward declarations") {
   struct StateB;
 
   struct StateA {
-    static constexpr auto Name() { return "StateA"; }
+    static constexpr auto Name() { return test_constants::kStateAName; }
     explicit StateA(Data &d) : data{d} {}
     void OnEnter() { data.on_enter_A_called++; }
-    auto Process() -> vsm::DoNothing {
+    auto Process() -> vsm::TransitionTo<StateB> {
       data.process_A_called++;
       return {};
     }
@@ -279,7 +281,7 @@ TEST_CASE("Test forward declarations") {
   };
 
   struct StateB {
-    static constexpr auto Name() { return "StateB"; }
+    static constexpr auto Name() { return test_constants::kStateBName; }
     explicit StateB(Data &d) : data{d} {}
     void OnEnter() { data.on_enter_B_called++; }
     auto Process() -> vsm::TransitionTo<StateA> {
@@ -294,10 +296,6 @@ TEST_CASE("Test forward declarations") {
     Data &data;
   };
 
-  auto data = Data{};
-  auto expected = data;
-  std::string from = "";
-  std::string to = "";
   auto log_cb = [&](auto from_state, auto to_state) {
     from = from_state;
     to = to_state;
@@ -314,8 +312,8 @@ TEST_CASE("Test forward declarations") {
   expected.process_A_called++;
   expected.on_exit_A_called++;
   expected.on_enter_B_called++;
-  CHECK(from == "StateA");
-  CHECK(to == "StateB");
+  CHECK(from == test_constants::kStateAName);
+  CHECK(to == test_constants::kStateBName);
   CHECK(data == expected);
 
   sm.Handle(Event{});
@@ -323,7 +321,7 @@ TEST_CASE("Test forward declarations") {
   expected.event_handled_B++;
   expected.on_exit_B_called++;
   expected.on_enter_A_called++;
-  CHECK(from == "StateB");
-  CHECK(to == "StateA");
+  CHECK(from == test_constants::kStateBName);
+  CHECK(to == test_constants::kStateAName);
   CHECK(data == expected);
 }
