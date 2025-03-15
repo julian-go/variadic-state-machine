@@ -20,7 +20,29 @@ int main() {
 }
 ```
 
-Checkout the [example](examples/traffic_lights/main.cpp).
+States can be very lean, they only have to handle all events.
+
+```cpp
+struct SwitchPressed{};
+
+struct LightOff {
+  auto Handle(const SwitchPressed &) -> vsm::TransitionTo<LightOn> {
+    std::cout << "Light is now on\n";
+    return {};
+  }
+};
+
+struct LightOn {
+  auto Handle(const SwitchPressed &) -> vsm::TransitionTo<LightOff> {
+    std::cout << "Light is now off\n";
+    return {};
+  }
+};
+// ...
+sm.Handle(SwitchPressed{});
+```
+
+Checkout the [examples](examples/).
 
 ## Build instructions
 ```
