@@ -10,7 +10,7 @@ struct State {
   auto Process() -> Maybe<TransitionTo<OtherState>>; // might transition to 'OtherState'
   void OnExit();
 
-  auto Handle(const BEvent& event) -> TransitionTo<AnotherState>; // transitions to 'AnotherState'
+  auto Handle(const Event& event) -> TransitionTo<AnotherState>; // transitions to 'AnotherState'
 };
 
 int main() {
