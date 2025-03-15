@@ -126,6 +126,7 @@ TEST_CASE("Specialized Event State Transition") {
 
   expected.event_handled_A++;
   CHECK(data == expected);
+  CHECK(sm.IsInState<specialized::StateA>());
 
   sm.Handle(Event{});
 
@@ -134,6 +135,7 @@ TEST_CASE("Specialized Event State Transition") {
   expected.on_exit_A_called++;
   expected.current_state = 'B';
   CHECK(data == expected);
+  CHECK(sm.IsInState<specialized::StateB>());
 
   sm.Handle(Event{});
 
@@ -236,4 +238,92 @@ TEST_CASE("Logcallback not executed") {
 
   CHECK(data.current_state == 'A');
   CHECK(num_log_calls == 0);
+}
+
+TEST_CASE("State without process call") {
+  auto data = Data{};
+
+  auto sm =
+      vsm::StateMachine(no_process::StateA{data}, no_process::StateB{data});
+
+  CHECK(sm.IsInState<no_process::StateA>());
+  sm.Handle(Event{});
+  CHECK(sm.IsInState<no_process::StateB>());
+  sm.Handle(Event{});
+  CHECK(sm.IsInState<no_process::StateA>());
+  sm.Handle(Event{});
+  CHECK(sm.IsInState<no_process::StateB>());
+  sm.Handle(Event{});
+  CHECK(sm.IsInState<no_process::StateA>());
+  sm.Handle(Event{});
+  CHECK(sm.IsInState<no_process::StateB>());
+}
+
+TEST_CASE("Test forward declarations") {
+  struct StateB;
+
+  struct StateA {
+    static constexpr auto Name() { return "StateA"; }
+    explicit StateA(Data &d) : data{d} {}
+    void OnEnter() { data.on_enter_A_called++; }
+    auto Process() -> vsm::DoNothing {
+      data.process_A_called++;
+      return {};
+    }
+    void OnExit() { data.on_exit_A_called++; }
+    auto Handle(const Event & /* event */) -> vsm::TransitionTo<StateB> {
+      data.event_handled_A++;
+      return {};
+    };
+    Data &data;
+  };
+
+  struct StateB {
+    static constexpr auto Name() { return "StateB"; }
+    explicit StateB(Data &d) : data{d} {}
+    void OnEnter() { data.on_enter_B_called++; }
+    auto Process() -> vsm::TransitionTo<StateA> {
+      data.process_B_called++;
+      return {};
+    }
+    void OnExit() { data.on_exit_B_called++; }
+    auto Handle(const Event & /* event */) -> vsm::TransitionTo<StateA> {
+      data.event_handled_B++;
+      return {};
+    };
+    Data &data;
+  };
+
+  auto data = Data{};
+  auto expected = data;
+  std::string from = "";
+  std::string to = "";
+  auto log_cb = [&](auto from_state, auto to_state) {
+    from = from_state;
+    to = to_state;
+  };
+
+  auto sm = vsm::StateMachine(StateA{data}, StateB{data});
+  sm.SetLogCallback(log_cb);
+
+  expected.on_enter_A_called++;
+  CHECK(data == expected);
+
+  sm.Process();
+
+  expected.process_A_called++;
+  expected.on_exit_A_called++;
+  expected.on_enter_B_called++;
+  CHECK(from == "StateA");
+  CHECK(to == "StateB");
+  CHECK(data == expected);
+
+  sm.Handle(Event{});
+
+  expected.event_handled_B++;
+  expected.on_exit_B_called++;
+  expected.on_enter_A_called++;
+  CHECK(from == "StateB");
+  CHECK(to == "StateA");
+  CHECK(data == expected);
 }

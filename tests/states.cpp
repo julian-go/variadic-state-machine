@@ -241,3 +241,15 @@ auto StateB::Process() -> vsm::Maybe<vsm::TransitionTo<StateA>> {
 }
 
 }  // namespace no_log
+
+namespace no_process {
+
+auto StateA::Handle(const Event& /* event */) -> vsm::TransitionTo<StateB> {
+  return {};
+}
+
+auto StateB::Handle(const Event& /* event */) -> vsm::TransitionTo<StateA> {
+  return {};
+}
+
+}  // namespace no_process

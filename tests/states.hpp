@@ -166,4 +166,22 @@ struct StateB {
 
 }  // namespace no_log
 
+namespace no_process {
+
+struct StateB;
+
+struct StateA {
+  explicit StateA(Data &d) : data{d} {}
+  auto Handle(const Event &) -> vsm::TransitionTo<StateB>;
+  Data &data;
+};
+
+struct StateB {
+  explicit StateB(Data &d) : data{d} {}
+  auto Handle(const Event &) -> vsm::TransitionTo<StateA>;
+  Data &data;
+};
+
+}  // namespace no_process
+
 #endif
