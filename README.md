@@ -1,5 +1,5 @@
 # Variadic State Machine
-![Language](https://img.shields.io/badge/C%2B%2B-17/20-blue.svg) ![License](https://img.shields.io/badge/license-MIT-blue)
+![Language](https://img.shields.io/badge/C%2B%2B-17/20-blue.svg) ![License](https://img.shields.io/badge/license-MIT-blue) [![build](https://github.com/julian-go/variadic-state-machine/actions/workflows/build.yml/badge.svg)](https://github.com/julian-go/variadic-state-machine/actions/workflows/build.yml)
 
 A C++17 header-only state machine implementation, leveraging variadic templates for compile-time checking of transitions and event-handling.
 
