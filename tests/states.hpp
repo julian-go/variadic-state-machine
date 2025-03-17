@@ -25,6 +25,16 @@ struct Data {
 
 bool operator==(const Data &lhs, const Data &rhs);
 
+namespace test0 {
+struct State {
+  explicit State(Data &d) : data{d} {}
+
+  void InitialTransition();
+
+  Data &data;
+};
+}  // namespace test0
+
 namespace test1 {
 
 struct State {

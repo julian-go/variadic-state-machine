@@ -26,10 +26,23 @@ struct StateMachineFixture {
 };
 
 TEST_SUITE("Basic State Machine Functionality") {
+  TEST_CASE_FIXTURE(StateMachineFixture, "Initial Transition Called") {
+    auto sm = vsm::StateMachine(test0::State{data});
+
+    expected.on_enter_called++;
+
+    CHECK(data == expected);
+
+    sm.Process();
+    sm.Process();
+    sm.Process();
+
+    CHECK(data == expected);
+  }
+
   TEST_CASE_FIXTURE(StateMachineFixture, "Process called") {
     auto sm = vsm::StateMachine(test1::StateWithOnEnter{data});
 
-    expected.on_enter_called++;
     CHECK(data == expected);
 
     sm.Process();
@@ -75,8 +88,6 @@ TEST_SUITE("State Transitions") {
   TEST_CASE_FIXTURE(StateMachineFixture, "Process State Transition") {
     auto sm = vsm::StateMachine(test2::StateA{data}, test2::StateB{data});
 
-    expected.on_enter_A_called++;
-    expected.current_state = test_constants::kStateA;
     CHECK(data == expected);
 
     sm.Process();
@@ -109,8 +120,6 @@ TEST_SUITE("State Transitions") {
   TEST_CASE_FIXTURE(StateMachineFixture, "Event State Transition") {
     auto sm = vsm::StateMachine(test2::StateA{data}, test2::StateB{data});
 
-    expected.on_enter_A_called++;
-    expected.current_state = test_constants::kStateA;
     CHECK(data == expected);
 
     sm.Handle(Event{});
@@ -144,8 +153,6 @@ TEST_SUITE("State Transitions") {
     auto sm =
         vsm::StateMachine(specialized::StateA{data}, specialized::StateB{data});
 
-    expected.on_enter_A_called++;
-    expected.current_state = test_constants::kStateA;
     CHECK(data == expected);
 
     sm.Handle(Event{});
@@ -223,8 +230,6 @@ TEST_SUITE("Logging") {
       to = to_state;
     });
 
-    CHECK(data.current_state == test_constants::kStateA);
-
     sm.Process();
 
     CHECK(data.current_state == test_constants::kStateB);
@@ -247,8 +252,6 @@ TEST_SUITE("Logging") {
     sm.SetLogCallback(
         [&](auto /* from_state */, auto /* to_state */) { num_log_calls++; });
 
-    CHECK(data.current_state == test_constants::kStateA);
-
     sm.Process();
 
     CHECK(data.current_state == test_constants::kStateB);
@@ -267,6 +270,7 @@ TEST_CASE_FIXTURE(StateMachineFixture, "Test forward declarations") {
   struct StateA {
     static constexpr auto Name() { return test_constants::kStateAName; }
     explicit StateA(Data &d) : data{d} {}
+    void InitialTransition() { OnEnter(); }
     void OnEnter() { data.on_enter_A_called++; }
     auto Process() -> vsm::TransitionTo<StateB> {
       data.process_A_called++;

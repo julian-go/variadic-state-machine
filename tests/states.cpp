@@ -20,6 +20,12 @@ bool operator==(const Data& lhs, const Data& rhs) {
          lhs.current_state == rhs.current_state;
 }
 
+namespace test0 {
+
+void State::InitialTransition() { data.on_enter_called++; }
+
+}  // namespace test0
+
 namespace test1 {
 
 void State::OnEnter(const Event& /*event*/) { data.on_enter_event_called++; }

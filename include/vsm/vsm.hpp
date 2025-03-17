@@ -44,12 +44,13 @@ struct HasName<
     : std::true_type {};
 
 template <typename, typename = std::void_t<>>
-struct HasOnEnter : std::false_type {};
+struct HasInitialTransition : std::false_type {};
 
 template <typename T>
-struct HasOnEnter<
-    T, std::enable_if_t<is_complete_v<T>,
-                        std::void_t<decltype(std::declval<T>().OnEnter())>>>
+struct HasInitialTransition<
+    T, std::enable_if_t<
+           is_complete_v<T>,
+           std::void_t<decltype(std::declval<T>().InitialTransition())>>>
     : std::true_type {};
 
 template <typename, typename = std::void_t<>>
@@ -107,11 +108,6 @@ class StateMachine {
   template <typename State>
   auto TransitionTo() -> State &;
 
-  /// @brief The initial transition is called upon construction of the state
-  /// machine
-  template <typename State>
-  auto InitialTransition(State &state) -> void;
-
   /// @brief The list of states the statemachine holds, no duplicates possible
   std::tuple<InitialState, States...> states_;
 
@@ -140,9 +136,10 @@ struct TransitionTo {
 
   void Enter(...) {};
   template <typename State>
-  auto Enter(State &to, ...) -> decltype(to.OnEnter());
+  auto Enter(State &to_state, ...) -> decltype(to_state.OnEnter());
   template <typename State, typename Event>
-  auto Enter(State &to, const Event &event) -> decltype(to.OnEnter(event));
+  auto Enter(State &to_state, const Event &event)
+      -> decltype(to_state.OnEnter(event));
 
   template <typename StateMachine, typename FromState>
   void Log(StateMachine &machine);
@@ -159,6 +156,7 @@ struct DoNothing {
 template <typename... Transitions>
 struct Either {
   template <typename Transition>
+  // NOLINTNEXTLINE(google-explicit-constructor)
   Either(Transition transition) : transition_{std::move(transition)} {}
 
   template <typename StateMachine, typename FromState, typename... Event>
@@ -186,8 +184,13 @@ StateMachine<InitialState, States...>::StateMachine(InitialState initial_state,
     : states_{std::forward<InitialState>(initial_state),
               std::forward<States>(states)...},
       current_state_{&std::get<0>(states_)} {
-  auto state_visitor = [this](auto *state) { InitialTransition(*state); };
-  std::visit(state_visitor, current_state_);
+  if constexpr (detail::HasInitialTransition<InitialState>::value) {
+    std::get<InitialState>(states_).InitialTransition();
+  } else {
+    static_assert(
+        detail::is_complete_v<InitialState>,
+        "State must be fully defined before calling InitialTransition.");
+  }
 }
 
 template <typename InitialState, typename... States>
@@ -228,19 +231,6 @@ auto StateMachine<InitialState, States...>::TransitionTo() -> State & {
   return state;
 }
 
-template <typename InitialState, typename... States>
-template <typename State>
-auto StateMachine<InitialState, States...>::InitialTransition(State &state)
-    -> void {
-  if constexpr (detail::HasOnEnter<State>::value) {
-    state.OnEnter();
-  } else {
-    static_assert(
-        detail::is_complete_v<State>,
-        "State must be fully defined before calling InitialTransition.");
-  }
-}
-
 // =======================================================================
 // Implementation of TransitionTo Class
 // =======================================================================
@@ -250,8 +240,8 @@ void TransitionTo<ToState>::Execute(StateMachine &machine, FromState &from,
                                     const Event &...event) {
   Log<StateMachine, FromState>(machine);
   Exit(from, event...);
-  auto &to = machine.template TransitionTo<ToState>();
-  Enter(to, event...);
+  auto &to_state = machine.template TransitionTo<ToState>();
+  Enter(to_state, event...);
 }
 
 template <typename ToState>
@@ -269,15 +259,16 @@ auto TransitionTo<ToState>::Exit(State &from, const Event &event)
 
 template <typename ToState>
 template <typename State>
-auto TransitionTo<ToState>::Enter(State &to, ...) -> decltype(to.OnEnter()) {
-  to.OnEnter();
+auto TransitionTo<ToState>::Enter(State &to_state, ...)
+    -> decltype(to_state.OnEnter()) {
+  to_state.OnEnter();
 }
 
 template <typename ToState>
 template <typename State, typename Event>
-auto TransitionTo<ToState>::Enter(State &to, const Event &event)
-    -> decltype(to.OnEnter(event)) {
-  to.OnEnter(event);
+auto TransitionTo<ToState>::Enter(State &to_state, const Event &event)
+    -> decltype(to_state.OnEnter(event)) {
+  to_state.OnEnter(event);
 }
 
 template <typename ToState>

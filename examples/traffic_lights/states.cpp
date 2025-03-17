@@ -1,5 +1,7 @@
 #include "states.hpp"
 
+void Red::InitialTransition() { OnEnter(); }
+
 void Red::OnEnter() {
   std::cout << "Started red phase\n";
   data_.timer = 0;
