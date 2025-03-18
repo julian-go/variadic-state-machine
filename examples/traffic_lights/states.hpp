@@ -32,7 +32,6 @@ struct Green;
 struct Red {
   explicit Red(Data& data) : data_{data} {}
 
-  void InitialTransition();
   void OnEnter();
   auto Process() -> vsm::Maybe<vsm::TransitionTo<Yellow>>;
   void OnExit();

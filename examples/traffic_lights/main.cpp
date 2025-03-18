@@ -21,6 +21,9 @@ void GetInput() {
 }  // namespace
 
 auto main() -> int {
+  std::cout << "Press 'p' to cause a transition to green, 'a' to cause a "
+               "transition to red\n";
+
   std::thread input_thread(GetInput);
 
   Data data;
