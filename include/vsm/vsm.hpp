@@ -44,16 +44,6 @@ struct HasName<
     : std::true_type {};
 
 template <typename, typename = std::void_t<>>
-struct HasInitialTransition : std::false_type {};
-
-template <typename T>
-struct HasInitialTransition<
-    T, std::enable_if_t<
-           is_complete_v<T>,
-           std::void_t<decltype(std::declval<T>().InitialTransition())>>>
-    : std::true_type {};
-
-template <typename, typename = std::void_t<>>
 struct HasProcess : std::false_type {};
 
 template <typename T>
@@ -67,7 +57,8 @@ struct HasProcess<
 template <typename ToState>
 struct TransitionTo;
 
-/// @brief An input-driven state machine for embedded applications.
+/// @brief Implements a state machine that can transition between states.
+/// It can handle events, perform entry, process, and exit actions.
 template <typename InitialState, typename... States>
 class StateMachine {
  public:
@@ -78,6 +69,9 @@ class StateMachine {
   /// @param states         The remaining states the state machine can
   /// transition to.
   explicit StateMachine(InitialState initial_state, States... states);
+
+  /// @brief Calls the initial transition of the initial state.
+  void InitialTransition() { std::get<InitialState>(states_).OnEnter(); }
 
   /// @brief Processes the current state, calling its Process(...) function.
   /// Note: Might result in a transition.
@@ -183,15 +177,7 @@ StateMachine<InitialState, States...>::StateMachine(InitialState initial_state,
                                                     States... states)
     : states_{std::forward<InitialState>(initial_state),
               std::forward<States>(states)...},
-      current_state_{&std::get<0>(states_)} {
-  if constexpr (detail::HasInitialTransition<InitialState>::value) {
-    std::get<InitialState>(states_).InitialTransition();
-  } else {
-    static_assert(
-        detail::is_complete_v<InitialState>,
-        "State must be fully defined before calling InitialTransition.");
-  }
-}
+      current_state_{&std::get<0>(states_)} {}
 
 template <typename InitialState, typename... States>
 void StateMachine<InitialState, States...>::Process() {

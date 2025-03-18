@@ -29,6 +29,8 @@ TEST_SUITE("Basic State Machine Functionality") {
   TEST_CASE_FIXTURE(StateMachineFixture, "Initial Transition Called") {
     auto sm = vsm::StateMachine(test0::State{data});
 
+    sm.InitialTransition();
+
     expected.on_enter_called++;
 
     CHECK(data == expected);
@@ -270,7 +272,6 @@ TEST_CASE_FIXTURE(StateMachineFixture, "Test forward declarations") {
   struct StateA {
     static constexpr auto Name() { return test_constants::kStateAName; }
     explicit StateA(Data &d) : data{d} {}
-    void InitialTransition() { OnEnter(); }
     void OnEnter() { data.on_enter_A_called++; }
     auto Process() -> vsm::TransitionTo<StateB> {
       data.process_A_called++;
@@ -307,7 +308,7 @@ TEST_CASE_FIXTURE(StateMachineFixture, "Test forward declarations") {
 
   auto sm = vsm::StateMachine(StateA{data}, StateB{data});
   sm.SetLogCallback(log_cb);
-
+  sm.InitialTransition();
   expected.on_enter_A_called++;
   CHECK(data == expected);
 

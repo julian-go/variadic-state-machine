@@ -29,7 +29,7 @@ namespace test0 {
 struct State {
   explicit State(Data &d) : data{d} {}
 
-  void InitialTransition();
+  void OnEnter();
 
   Data &data;
 };

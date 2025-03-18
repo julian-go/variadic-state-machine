@@ -22,7 +22,7 @@ bool operator==(const Data& lhs, const Data& rhs) {
 
 namespace test0 {
 
-void State::InitialTransition() { data.on_enter_called++; }
+void State::OnEnter() { data.on_enter_called++; }
 
 }  // namespace test0
 

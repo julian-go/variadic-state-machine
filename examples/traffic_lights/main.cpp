@@ -26,6 +26,8 @@ auto main() -> int {
   Data data;
   vsm::StateMachine sm(Red{data}, Yellow{data}, Green{data});
 
+  sm.InitialTransition();
+
   while (input != 'q') {
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
     sm.Process();
