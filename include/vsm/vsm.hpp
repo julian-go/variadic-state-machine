@@ -30,9 +30,11 @@ namespace vsm {
 
 namespace detail {
 template <typename T, typename = void>
+// NOLINTNEXTLINE(readability-identifier-naming)
 constexpr bool is_complete_v = false;
 
 template <typename T>
+// NOLINTNEXTLINE(readability-identifier-naming)
 constexpr bool is_complete_v<T, decltype(void(sizeof(T)))> = true;
 
 template <typename T, typename = void>
@@ -122,15 +124,18 @@ struct TransitionTo {
   void Execute(StateMachine &machine, FromState &from, const Event &...event);
 
  private:
-  void Exit(...) {};
-  template <typename State>
-  auto Exit(State &from, ...) -> decltype(from.OnExit());
+  template <typename... Parameters>
+  void Exit(Parameters... /* p */) {}
+  template <typename State, typename... Events>
+  auto Exit(State &from, Events... /* events */) -> decltype(from.OnExit());
   template <typename State, typename Event>
   auto Exit(State &from, const Event &event) -> decltype(from.OnExit(event));
 
-  void Enter(...) {};
-  template <typename State>
-  auto Enter(State &to_state, ...) -> decltype(to_state.OnEnter());
+  template <typename... Parameters>
+  void Enter(Parameters... /* p */) {}
+  template <typename State, typename... Events>
+  auto Enter(State &to_state, Events... /* events */)
+      -> decltype(to_state.OnEnter());
   template <typename State, typename Event>
   auto Enter(State &to_state, const Event &event)
       -> decltype(to_state.OnEnter(event));
@@ -141,7 +146,8 @@ struct TransitionTo {
 
 /// @brief Convenience transition that does nothing.
 struct DoNothing {
-  void Execute(...) const {}
+  template <typename... Parameters>
+  void Execute(Parameters... /* p */) const {}
 };
 
 /// @brief Convenience transition that can contain different transitions for
@@ -185,8 +191,6 @@ void StateMachine<InitialState, States...>::Process() {
     if constexpr (detail::HasProcess<
                       std::remove_pointer_t<decltype(state)>>::value) {
       state->Process().Execute(*this, *state);
-    } else {
-      DoNothing{}.Execute(*this, *state);
     }
   };
   std::visit(state_visitor, current_state_);
@@ -231,8 +235,9 @@ void TransitionTo<ToState>::Execute(StateMachine &machine, FromState &from,
 }
 
 template <typename ToState>
-template <typename State>
-auto TransitionTo<ToState>::Exit(State &from, ...) -> decltype(from.OnExit()) {
+template <typename State, typename... Events>
+auto TransitionTo<ToState>::Exit(State &from, Events... /* events */)
+    -> decltype(from.OnExit()) {
   from.OnExit();
 }
 
@@ -244,8 +249,8 @@ auto TransitionTo<ToState>::Exit(State &from, const Event &event)
 }
 
 template <typename ToState>
-template <typename State>
-auto TransitionTo<ToState>::Enter(State &to_state, ...)
+template <typename State, typename... Events>
+auto TransitionTo<ToState>::Enter(State &to_state, Events... /* events */)
     -> decltype(to_state.OnEnter()) {
   to_state.OnEnter();
 }
