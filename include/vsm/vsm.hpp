@@ -94,6 +94,14 @@ class StateMachine {
   /// @param log_cb The callback to use, syntax should take (from, to)
   void SetLogCallback(LogCallback log_cb);
 
+  /// @brief Returns a specific state from the state machine
+  /// @tparam State The state to return
+  /// @return A reference to the state
+  template <typename State>
+  [[nodiscard]] auto GetState() -> State & {
+    return std::get<State>(states_);
+  }
+
  private:
   template <typename ToState>
   friend struct TransitionTo;
